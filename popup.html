@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Webpage Schema Builder</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>✨ Schema Builder</h1>
+      <p class="subtitle">Generate JSON-LD markup for SEO</p>
+    </div>
+
+    <div class="card">
+      <div class="form-group">
+        <label for="apiKey">Google AI Studio API Key</label>
+        <div class="input-wrapper">
+          <input type="password" id="apiKey" placeholder="Enter your API key" />
+          <button class="toggle-visibility" id="toggleKey" aria-label="Toggle visibility">👁️</button>
+        </div>
+        <a href="https://aistudio.google.com/app/api-keys" target="_blank" class="link">Get API Key</a>
+      </div>
+
+      <div class="form-group">
+        <label for="keywords">Seed Keywords (comma-separated)</label>
+        <input type="text" id="keywords" placeholder="e.g., ar-15 parts, rifle accessories" />
+      </div>
+
+      <div class="form-group">
+        <label for="url">Page URL</label>
+        <input type="text" id="url" placeholder="Current page or enter URL" />
+        <button class="btn-secondary" id="useCurrentPage">Use Current Page</button>
+      </div>
+
+      <div class="form-group checkbox-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="includePreview" checked />
+          <span>Include content preview in output</span>
+        </label>
+      </div>
+
+      <button class="btn-primary" id="generateBtn">
+        <span class="btn-text">Generate Schema</span>
+        <span class="btn-loader" style="display: none;">⏳</span>
+      </button>
+    </div>
+
+    <div class="card result-card" id="resultCard" style="display: none;">
+      <h3>Generated Schema</h3>
+      <div class="result-actions">
+        <button class="btn-secondary" id="copyBtn">📋 Copy</button>
+        <button class="btn-secondary" id="downloadTxtBtn">📄 Download TXT</button>
+        <button class="btn-secondary" id="downloadJsonBtn">📦 Download JSON</button>
+      </div>
+      <pre class="result-content" id="resultContent"></pre>
+    </div>
+
+    <div class="card error-card" id="errorCard" style="display: none;">
+      <h3>❌ Error</h3>
+      <p class="error-message" id="errorMessage"></p>
+    </div>
+
+    <div class="footer">
+      <p>Powered by Gemini 2.0 Flash Lite</p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
+

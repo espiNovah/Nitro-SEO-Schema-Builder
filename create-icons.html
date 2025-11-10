@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Icon Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+    }
+    canvas {
+      border: 1px solid #ddd;
+      margin: 10px 0;
+      display: block;
+    }
+    button {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background: #5568d3;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Extension Icon Generator</h1>
+    <p>Click the buttons below to generate and download icons for the Chrome extension.</p>
+    
+    <div>
+      <canvas id="canvas16" width="16" height="16"></canvas>
+      <button onclick="generateIcon(16)">Generate 16x16</button>
+      <button onclick="downloadIcon(16)">Download icon16.png</button>
+    </div>
+    
+    <div>
+      <canvas id="canvas48" width="48" height="48"></canvas>
+      <button onclick="generateIcon(48)">Generate 48x48</button>
+      <button onclick="downloadIcon(48)">Download icon48.png</button>
+    </div>
+    
+    <div>
+      <canvas id="canvas128" width="128" height="128"></canvas>
+      <button onclick="generateIcon(128)">Generate 128x128</button>
+      <button onclick="downloadIcon(128)">Download icon128.png</button>
+    </div>
+    
+    <div style="margin-top: 20px;">
+      <button onclick="generateAll()">Generate All Icons</button>
+    </div>
+  </div>
+
+  <script>
+    function generateIcon(size) {
+      const canvas = document.getElementById(`canvas${size}`);
+      const ctx = canvas.getContext('2d');
+      
+      // Gradient background
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#667eea');
+      gradient.addColorStop(1, '#764ba2');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+      
+      // Add rounded corners effect
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.beginPath();
+      const radius = size * 0.2;
+      ctx.moveTo(radius, 0);
+      ctx.lineTo(size - radius, 0);
+      ctx.quadraticCurveTo(size, 0, size, radius);
+      ctx.lineTo(size, size - radius);
+      ctx.quadraticCurveTo(size, size, size - radius, size);
+      ctx.lineTo(radius, size);
+      ctx.quadraticCurveTo(0, size, 0, size - radius);
+      ctx.lineTo(0, radius);
+      ctx.quadraticCurveTo(0, 0, radius, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      
+      // Add "SB" text
+      ctx.fillStyle = 'white';
+      ctx.font = `bold ${size * 0.5}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('SB', size / 2, size / 2);
+    }
+    
+    function downloadIcon(size) {
+      const canvas = document.getElementById(`canvas${size}`);
+      const link = document.createElement('a');
+      link.download = `icon${size}.png`;
+      link.href = canvas.toDataURL();
+      link.click();
+    }
+    
+    function generateAll() {
+      generateIcon(16);
+      generateIcon(48);
+      generateIcon(128);
+      setTimeout(() => {
+        downloadIcon(16);
+        setTimeout(() => downloadIcon(48), 100);
+        setTimeout(() => downloadIcon(128), 200);
+      }, 100);
+    }
+    
+    // Generate on load
+    window.onload = () => {
+      generateIcon(16);
+      generateIcon(48);
+      generateIcon(128);
+    };
+  </script>
+</body>
+</html>
+
