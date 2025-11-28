@@ -5,7 +5,7 @@ A beautiful Chrome extension that generates JSON-LD schema markup for multiple w
 ## Features
 
 - ✨ **Glassmorphism UI** - Modern, clean design with frosted glass effects
-- 🤖 **AI-Powered** - Uses Gemini 2.0 Flash to generate SEO-optimized schemas
+- 🤖 **AI-Powered** - Uses Google's Gemini Flash models to generate SEO-optimized schemas
 - 📊 **Batch Processing** - Process up to 20 URLs from a CSV file
 - 📄 **Multiple Formats** - Download individual or all schemas as TXT or JSON
 - 🔍 **Smart Extraction** - Automatically extracts page content, FAQs, and metadata
@@ -15,11 +15,16 @@ A beautiful Chrome extension that generates JSON-LD schema markup for multiple w
 
 ## Installation
 
-1. **Download or clone this repository**
-   ```bash
-   git clone <repository-url>
-   cd WebPageSchema
-   ```
+1. **Download the Source Code**
+   - **Option A (Git Users):** Clone the repository
+     ```bash
+     git clone <repository-url>
+     cd WebPageSchema
+     ```
+   - **Option B (Non-Git Users):**
+     - Click the green **"Code"** button at the top of the GitHub page.
+     - Select **"Download ZIP"**.
+     - Extract the ZIP file to a folder on your computer.
 
 2. **Get a Google AI Studio API Key**
    - Visit [https://aistudio.google.com/app/api-keys](https://aistudio.google.com/app/api-keys)
@@ -32,10 +37,6 @@ A beautiful Chrome extension that generates JSON-LD schema markup for multiple w
    - Click "Load unpacked"
    - Select the extension directory
 
-4. **Add Icons** (Optional)
-   - Create an `icons` folder
-   - Add icon files: `icon16.png`, `icon48.png`, `icon128.png`
-   - Or use `create-icons.html` to generate them
 
 ## Usage
 
@@ -123,7 +124,7 @@ The extension requires:
 - Verify your API key is correct
 - Check that you have API access enabled
 - Ensure you have quota remaining
-- Try using `gemini-1.5-flash` instead of `gemini-2.0-flash` in `app.js`
+- Try using a different model from the [Gemini models page](https://ai.google.dev/gemini-api/docs/models) in `app.js`
 
 **"Failed to fetch page"**
 - The URL might be blocked by CORS
@@ -141,44 +142,12 @@ The extension requires:
 - Try a different URL
 - Check your API quota
 
-## File Structure
 
-```
-WebPageSchema/
-├── manifest.json       # Extension manifest
-├── index.html         # Main extension interface
-├── styles.css         # Glassmorphism styles
-├── app.js             # Main extension logic
-├── background.js      # Service worker for API calls
-├── content.js         # Content script
-├── icons/             # Extension icons
-│   ├── icon16.png
-│   ├── icon48.png
-│   └── icon128.png
-├── README.md          # This file
-├── QUICKSTART.md      # Quick start guide
-└── create-icons.html  # Icon generator tool
-```
-
-## Development
-
-### Customization
-
-**Change AI Model**
-- Edit `MODEL` constant in `app.js` (line ~50)
-- Available models: `gemini-2.0-flash`, `gemini-1.5-flash`, `gemini-pro`, etc.
-
-**Modify URL Limit**
-- Edit `MAX_URLS` constant in `app.js` (line ~49)
-
-**Modify Styling**
-- Edit `styles.css` for colors, sizes, effects
-- Glassmorphism is achieved via `backdrop-filter: blur()`
-
-**Adjust Content Extraction**
-- Modify `parseHTML()` in `background.js`
-
-## License
+## Contributing
+ 
+ We welcome contributions! If you'd like to help improve this extension, please check out our [Contribution Guidelines](CONTRIBUTING.md).
+ 
+ ## License
 
 MIT License - feel free to modify and distribute.
 

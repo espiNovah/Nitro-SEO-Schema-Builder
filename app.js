@@ -5,6 +5,7 @@
 // Constants
 const MAX_URLS = 20;
 const MODEL = 'gemini-2.0-flash';
+const GITHUB_REPO = 'espiNovah/Nitro-SEO-Schema-Builder';
 
 // Templates
 const TEMPLATES = {
@@ -264,7 +265,10 @@ const elements = {
   // Error
   errorToast: document.getElementById('errorToast'),
   errorMessage: document.getElementById('errorMessage'),
-  closeError: document.getElementById('closeError')
+  closeError: document.getElementById('closeError'),
+
+  // Updates
+  checkUpdateBtn: document.getElementById('checkUpdateBtn')
 };
 
 // Initialize
@@ -614,6 +618,9 @@ function setupEventListeners() {
       elements.resultModal.style.display = 'none';
     }
   });
+
+  // Check for updates
+  elements.checkUpdateBtn?.addEventListener('click', checkForUpdates);
 }
 
 function downloadSampleCsv() {
@@ -2309,4 +2316,88 @@ function viewTemplate(key) {
     currentSchema = { schema: template.schema };
     showResultModal(currentSchema);
   }
+}
+
+// ============================================================================
+// UPDATE CHECKER
+// ============================================================================
+
+async function checkForUpdates() {
+  const btn = elements.checkUpdateBtn;
+  const originalText = btn.innerHTML;
+
+  // Simple spinner
+  btn.innerHTML = `<svg class="btn-loader" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block; vertical-align:middle; animation: spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg> Checking...`;
+  btn.disabled = true;
+
+  try {
+    const manifestUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/manifest.json`;
+    const response = await fetch(manifestUrl);
+    if (!response.ok) throw new Error('Failed to fetch update info');
+
+    const remoteManifest = await response.json();
+    const localManifest = chrome.runtime.getManifest();
+
+    if (compareVersions(remoteManifest.version, localManifest.version) > 0) {
+      // Show update modal
+      elements.confirmTitle.textContent = 'Update Available 🚀';
+      elements.confirmMessage.innerHTML = `
+        A new version <strong>v${remoteManifest.version}</strong> is available!<br><br>
+        Current version: v${localManifest.version}<br><br>
+        To update, run <code>git pull</code> or download the latest version from GitHub.
+      `;
+
+      elements.confirmDelete.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+          <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+        </svg>
+        View on GitHub
+      `;
+      elements.confirmDelete.style.background = 'var(--primary)';
+      elements.confirmDelete.onclick = () => {
+        window.open(`https://github.com/${GITHUB_REPO}`, '_blank');
+        closeConfirmModal();
+      };
+
+      elements.confirmModal.style.display = 'block';
+
+    } else {
+      // Show toast
+      const toast = elements.errorToast;
+      const msg = elements.errorMessage;
+      const icon = toast.querySelector('.error-icon');
+
+      // Hacky style change for success
+      toast.style.borderLeft = '4px solid #10b981'; // Success green
+      if (icon) icon.textContent = '✅';
+      msg.textContent = `You are on the latest version (v${localManifest.version})`;
+      toast.style.display = 'block';
+
+      setTimeout(() => {
+        toast.style.display = 'none';
+        // Reset style
+        toast.style.borderLeft = '';
+        if (icon) icon.textContent = '❌';
+      }, 3000);
+    }
+  } catch (error) {
+    console.error('Update check failed:', error);
+    showError('Failed to check for updates. Please try again later.');
+  } finally {
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  }
+}
+
+function compareVersions(v1, v2) {
+  const parts1 = v1.split('.').map(Number);
+  const parts2 = v2.split('.').map(Number);
+
+  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+    const p1 = parts1[i] || 0;
+    const p2 = parts2[i] || 0;
+    if (p1 > p2) return 1;
+    if (p1 < p2) return -1;
+  }
+  return 0;
 }
