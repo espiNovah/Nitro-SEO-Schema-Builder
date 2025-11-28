@@ -41,6 +41,48 @@ const TEMPLATES = {
         }
       ]
     }
+  },
+  'FAQPage': {
+    name: 'Product FAQ Page',
+    description: 'FAQ schema template for product or category FAQ sections',
+    schema: {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Do you need a brace for your AR pistol?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Whether you’re building an AR pistol or a full-length rifle, you must cover the buffer tube with a stock of some kind. Builders opting for short-barrel designs often choose pistol braces for functionality and their smaller size."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which style is right for me—traditional or blade style?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The choice between a traditional or blade-style brace typically comes down to personal preference. However, you might also opt for a more minimalist blade-style part if you’re trying to reduce your carry weight or meet specific requirements for a competitive shooting event."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What’s the difference between an AR pistol and an AR rifle?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "One of the main differences between an AR pistol and an AR rifle is barrel length. While other parts are comparable between both AR types, a short barrel is the hallmark of an AR pistol. AR pistols are sometimes built in pistol calibers like 9mm or .22, but this isn’t always the case. Some AR pistols feature a pistol brace, but some builders opt for a traditional butt stock if they’re not comfortable shooting with just one hand."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do you add a pistol brace to your AR?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "You add a pistol brace to an AR the same way you would install a traditional butt stock — just slide it over the buffer tube and use any included hardware to attach it to the buffer tube or lower receiver. Make sure to follow the manufacturer’s installation instructions carefully."
+          }
+        }
+      ]
+    }
   }
 };
 
@@ -179,10 +221,13 @@ const elements = {
   batchSchemaType: document.getElementById('batchSchemaType'),
   csvFile: document.getElementById('csvFile'),
   fileUploadArea: document.getElementById('fileUploadArea'),
+  csvUploadGroup: document.getElementById('csvUploadGroup'),
   fileInfo: document.getElementById('fileInfo'),
   fileName: document.getElementById('fileName'),
   removeFile: document.getElementById('removeFile'),
   startProcessingBtn: document.getElementById('startProcessingBtn'),
+  bulkFaqUrlsGroup: document.getElementById('bulkFaqUrlsGroup'),
+  bulkFaqUrls: document.getElementById('bulkFaqUrls'),
   progressCard: document.getElementById('progressCard'),
   progressBar: document.getElementById('progressBar'),
   progressText: document.getElementById('progressText'),
@@ -367,7 +412,20 @@ function setupSchemaTypeSelector() {
   });
 
   elements.batchSchemaType.addEventListener('change', () => {
-    // Update batch schema type
+    const type = elements.batchSchemaType.value;
+    const isFaq = type === 'FAQPage';
+
+    // Toggle FAQ textarea vs CSV upload
+    if (elements.bulkFaqUrlsGroup) {
+      elements.bulkFaqUrlsGroup.style.display = isFaq ? 'block' : 'none';
+    }
+
+    if (elements.csvUploadGroup) {
+      elements.csvUploadGroup.style.display = isFaq ? 'none' : 'block';
+    }
+
+    // When switching types, recompute start button state
+    updateStartButton();
   });
 
   // Initial render
@@ -478,6 +536,11 @@ function setupEventListeners() {
   elements.apiKeyHeader?.addEventListener('input', async () => {
     await syncApiKey(elements.apiKeyHeader.value);
     updateStartButton(); // Update batch button state
+  });
+
+  // FAQ bulk URLs textarea (for FAQPage batch mode)
+  elements.bulkFaqUrls?.addEventListener('input', () => {
+    updateStartButton();
   });
 
   // File upload (batch processing)
@@ -677,6 +740,43 @@ async function extractPageContent(url) {
 }
 
 async function generateSchema(apiKey, url, pageData, schemaType, fieldValues = {}) {
+  // Special handling for FAQPage: build JSON-LD directly to match template/sample
+  if (schemaType === 'FAQPage') {
+    // Prefer FAQs from pageData (to support future scraping/manual input)
+    const faqsFromPage = Array.isArray(pageData?.faqs) ? pageData.faqs : [];
+
+    let mainEntity;
+
+    if (faqsFromPage.length > 0) {
+      mainEntity = faqsFromPage.map(faq => ({
+        '@type': 'Question',
+        name: faq.question || '',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: faq.answer || ''
+        }
+      })).filter(item => item.name && item.acceptedAnswer.text);
+    } else {
+      // Fallback to static template (matches your provided sample)
+      mainEntity = TEMPLATES.FAQPage?.schema?.mainEntity || [];
+    }
+
+    if (!mainEntity || mainEntity.length === 0) {
+      throw new Error('No FAQs found to build FAQPage schema');
+    }
+
+    const schemaObj = {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      description: 'JSON-LD schema for FAQPage',
+      mainEntity,
+      // Optional: use page title as name if available, otherwise leave out
+      ...(pageData?.title ? { name: pageData.title } : {})
+    };
+
+    return { schema: schemaObj };
+  }
+
   const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
   const urlObj = new URL(url);
   const domain = urlObj.hostname;
@@ -1182,7 +1282,18 @@ function isValidURL(string) {
 
 function updateStartButton() {
   const hasApiKey = (elements.apiKeyHeader?.value.trim().length > 0 || elements.apiKey?.value.trim().length > 0);
-  const hasData = csvData.length > 0;
+  const schemaType = elements.batchSchemaType?.value;
+
+  let hasData = false;
+
+  if (schemaType === 'FAQPage') {
+    const raw = elements.bulkFaqUrls?.value || '';
+    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+    hasData = lines.length > 0;
+  } else {
+    hasData = csvData.length > 0;
+  }
+
   if (elements.startProcessingBtn) {
     elements.startProcessingBtn.disabled = !hasApiKey || !hasData || isProcessing;
   }
@@ -1197,8 +1308,22 @@ async function startBatchProcessing() {
     return;
   }
 
+  // For FAQPage bulk, build csvData from pasted URLs instead of CSV
+  if (schemaType === 'FAQPage') {
+    const raw = elements.bulkFaqUrls?.value || '';
+    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+    const urls = lines.filter(isValidURL).slice(0, MAX_URLS);
+
+    if (!urls.length) {
+      showError('Please enter at least one valid URL (one per line).');
+      return;
+    }
+
+    csvData = urls.map(url => ({ url, keywords: [] }));
+  }
+
   if (csvData.length === 0) {
-    showError('Please upload a CSV file');
+    showError('Please upload a CSV file or enter URLs.');
     return;
   }
 
@@ -1276,6 +1401,7 @@ async function processNext(schemaType, apiKey) {
     if (elements.progressBar) elements.progressBar.style.width = '100%';
     if (elements.progressText) elements.progressText.textContent = `Complete: ${processingQueue.length} / ${processingQueue.length}`;
     if (elements.currentUrl) elements.currentUrl.textContent = '';
+    // Show controls with "Start Afresh" so user can easily run another bulk process
     updateControlButtons();
     return;
   }
