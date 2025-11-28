@@ -267,7 +267,7 @@ function extractContentFromDOM() {
   const textContent = mainContent.textContent || '';
   const cleanedText = textContent.replace(/\s+/g, ' ').trim().substring(0, 50000);
 
-  // Extract FAQs from JSON-LD
+  // Extract FAQs from JSON-LD and DOM
   const faqs = [];
   const jsonLdScripts = clone.querySelectorAll('script[type="application/ld+json"]');
   
@@ -321,7 +321,7 @@ function extractContentFromDOM() {
     }
   }
 
-  // Extract FAQs
+  // Extract FAQs from JSON-LD (FAQPage schema)
   jsonLdScripts.forEach(script => {
     try {
       const data = JSON.parse(script.textContent);
@@ -330,8 +330,13 @@ function extractContentFromDOM() {
         if (item['@type'] === 'FAQPage' && item.mainEntity) {
           const questions = Array.isArray(item.mainEntity) ? item.mainEntity : [item.mainEntity];
           questions.forEach(q => {
-            if (q.name && q.acceptedAnswer?.text) {
-              faqs.push([q.name, q.acceptedAnswer.text]);
+            const name = q.name && typeof q.name === 'string' ? q.name.trim() : '';
+            const answerText = q.acceptedAnswer?.text && typeof q.acceptedAnswer.text === 'string'
+              ? q.acceptedAnswer.text.trim()
+              : '';
+
+            if (name && answerText) {
+              faqs.push({ question: name, answer: answerText });
             }
           });
         }
@@ -343,14 +348,104 @@ function extractContentFromDOM() {
 
   // Extract FAQs from DOM if none found in JSON-LD
   if (faqs.length === 0) {
+    // 1) <details><summary> pattern
     clone.querySelectorAll('details').forEach(details => {
       const summary = details.querySelector('summary');
       if (summary) {
         const q = summary.textContent.trim();
-        const a = details.textContent.replace(q, '').trim();
-        if (q && a) faqs.push([q, a]);
+        const a = details.textContent.replace(summary.textContent, '').trim();
+        if (q && a) {
+          faqs.push({ question: q, answer: a });
+        }
       }
     });
+  }
+
+  // 2) Common FAQ containers with heading + following content
+  if (faqs.length === 0) {
+    const candidateContainers = Array.from(
+      clone.querySelectorAll(
+        '.faq, .faqs, .faq-section, .faq-accordion, [id*="faq" i], [class*="faq" i], .accordion, .accordion-item'
+      )
+    );
+
+    if (candidateContainers.length > 0) {
+      // Prefer containers with nearby headings mentioning FAQ / Frequently Asked Questions
+      const scored = candidateContainers.map(container => {
+        let score = 0;
+
+        // Look at previous sibling heading
+        const prev = container.previousElementSibling;
+        const prevText = (prev && /H[1-6]/.test(prev.tagName)) ? (prev.textContent || '').toLowerCase() : '';
+        if (prevText.includes('faq') || prevText.includes('frequently asked')) {
+          score += 3;
+        }
+
+        // Also scan headings inside the container
+        const innerHeading = container.querySelector('h2, h3, h4, h5, h6');
+        const innerText = innerHeading?.textContent?.toLowerCase() || '';
+        if (innerText.includes('faq') || innerText.includes('frequently asked')) {
+          score += 2;
+        }
+
+        return { container, baseScore: score };
+      });
+
+      let bestFaqs = [];
+      let bestScore = 0;
+
+      scored.forEach(entry => {
+        const { container, baseScore } = entry;
+
+        const questionNodes = Array.from(
+          container.querySelectorAll('h2, h3, h4, .question, .faq-question, [role="tab"]')
+        );
+
+        const localFaqs = [];
+
+        questionNodes.forEach(qNode => {
+          const qTextRaw = (qNode.textContent || '').trim();
+          if (!qTextRaw) return;
+
+          // Basic heuristic: treat as question if ends with ? or contains interrogative word
+          const lower = qTextRaw.toLowerCase();
+          const looksLikeQuestion =
+            qTextRaw.endsWith('?') ||
+            /\b(what|how|why|when|where|who|which|can|do|does|is|are|should)\b/.test(lower);
+
+          if (!looksLikeQuestion) return;
+
+          let answer = '';
+          let next = qNode.nextElementSibling;
+
+          while (next && !questionNodes.includes(next)) {
+            const text = (next.textContent || '').trim();
+            if (text) {
+              answer += (answer ? ' ' : '') + text;
+            }
+            next = next.nextElementSibling;
+          }
+
+          const aText = answer.trim();
+          // Require a reasonably sized answer to avoid noise
+          if (aText && aText.length > 20) {
+            localFaqs.push({ question: qTextRaw, answer: aText });
+          }
+        });
+
+        if (localFaqs.length > 0) {
+          const totalScore = baseScore + localFaqs.length; // favor containers with more Q&A
+          if (totalScore > bestScore) {
+            bestScore = totalScore;
+            bestFaqs = localFaqs;
+          }
+        }
+      });
+
+      if (bestFaqs.length > 0) {
+        bestFaqs.slice(0, 20).forEach(f => faqs.push(f));
+      }
+    }
   }
 
   return {

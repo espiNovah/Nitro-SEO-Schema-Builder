@@ -1398,8 +1398,14 @@ async function processNext(schemaType, apiKey) {
     isProcessing = false;
     isPaused = false;
     isCancelled = false; // Reset cancelled state on normal completion
-    if (elements.progressBar) elements.progressBar.style.width = '100%';
-    if (elements.progressText) elements.progressText.textContent = `Complete: ${processingQueue.length} / ${processingQueue.length}`;
+    if (elements.progressBar) {
+      elements.progressBar.style.width = '100%';
+      elements.progressBar.classList.add('success');
+    }
+    if (elements.progressText) {
+      elements.progressText.textContent = `Complete: ${processingQueue.length} / ${processingQueue.length}`;
+      elements.progressText.classList.add('success');
+    }
     if (elements.currentUrl) elements.currentUrl.textContent = '';
     // Show controls with "Start Afresh" so user can easily run another bulk process
     updateControlButtons();
@@ -1526,9 +1532,11 @@ function startAfresh() {
   // Reset progress
   if (elements.progressBar) {
     elements.progressBar.style.width = '0%';
+    elements.progressBar.classList.remove('success');
   }
   if (elements.progressText) {
     elements.progressText.textContent = '0 / 0';
+    elements.progressText.classList.remove('success');
   }
   if (elements.currentUrl) {
     elements.currentUrl.textContent = '';
@@ -1594,10 +1602,11 @@ function updateControlButtons() {
     cancelBtn.style.display = 'none';
     startAfreshBtn.style.display = 'flex';
   } else {
-    controlsContainer.style.display = 'none';
+    // Completed normally: show Start Afresh so user can restart another bulk run
+    controlsContainer.style.display = 'flex';
     pauseBtn.style.display = 'none';
     cancelBtn.style.display = 'none';
-    startAfreshBtn.style.display = 'none';
+    startAfreshBtn.style.display = 'flex';
   }
 }
 
@@ -1624,7 +1633,16 @@ function addResultItem(url, keywords, index) {
   item.id = `result-${index}`;
   item.setAttribute('data-index', index);
   item.innerHTML = `
-    <div class="result-item-url">${url}</div>
+    <div class="result-item-url">
+      <button class="btn-ghost btn-icon-only" type="button" title="Open URL in new tab" onclick="window.open('${url.replace(/'/g, "\\'")}', '_blank')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="14 3 21 3 21 10"></polyline>
+          <line x1="10" y1="14" x2="21" y2="3"></line>
+          <path d="M21 14v4a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h4"></path>
+        </svg>
+      </button>
+      <span>${url}</span>
+    </div>
     <span class="result-item-status processing" id="status-${index}">Processing...</span>
     <div class="result-item-actions" id="actions-${index}" style="display: none;"></div>
     ${keywords.length > 0 ? `<div class="result-item-keywords">Keywords: ${keywords.join(', ')}</div>` : ''}
