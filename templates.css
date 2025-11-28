@@ -1,0 +1,87 @@
+/* ============================================
+   TEMPLATES - Apple Glassmorphism Design
+   ============================================ */
+
+.templates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.template-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-amount));
+  -webkit-backdrop-filter: blur(var(--blur-amount));
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm);
+  padding: var(--spacing-lg);
+  transition: all 0.2s ease;
+}
+
+.template-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.template-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+}
+
+.template-header h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.template-type {
+  padding: 4px 8px;
+  background: var(--accent-light);
+  color: var(--accent);
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.template-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-lg);
+  flex: 1;
+  line-height: 1.6;
+}
+
+.template-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-top: auto;
+}
+
+.template-actions button {
+  flex: 1;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .templates-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .template-actions {
+    flex-direction: column;
+  }
+
+  .template-actions button {
+    width: 100%;
+  }
+}

@@ -1,138 +1,143 @@
-// DOM Elements
-const apiKeyInput = document.getElementById('apiKey');
-const toggleKeyBtn = document.getElementById('toggleKey');
-const keywordsInput = document.getElementById('keywords');
-const urlInput = document.getElementById('url');
-const useCurrentPageBtn = document.getElementById('useCurrentPage');
-const includePreviewCheckbox = document.getElementById('includePreview');
-const generateBtn = document.getElementById('generateBtn');
-const resultCard = document.getElementById('resultCard');
-const errorCard = document.getElementById('errorCard');
-const errorMessage = document.getElementById('errorMessage');
-const resultContent = document.getElementById('resultContent');
-const copyBtn = document.getElementById('copyBtn');
-const downloadTxtBtn = document.getElementById('downloadTxtBtn');
-const downloadJsonBtn = document.getElementById('downloadJsonBtn');
+// Cache DOM elements
+const elements = {
+  apiKeyInput: document.getElementById('apiKey'),
+  toggleKeyBtn: document.getElementById('toggleKey'),
+  keywordsInput: document.getElementById('keywords'),
+  urlInput: document.getElementById('url'),
+  useCurrentPageBtn: document.getElementById('useCurrentPage'),
+  includePreviewCheckbox: document.getElementById('includePreview'),
+  generateBtn: document.getElementById('generateBtn'),
+  resultCard: document.getElementById('resultCard'),
+  errorCard: document.getElementById('errorCard'),
+  errorMessage: document.getElementById('errorMessage'),
+  resultContent: document.getElementById('resultContent'),
+  copyBtn: document.getElementById('copyBtn'),
+  downloadTxtBtn: document.getElementById('downloadTxtBtn'),
+  downloadJsonBtn: document.getElementById('downloadJsonBtn'),
+  btnText: document.querySelector('.btn-text'),
+  btnLoader: document.querySelector('.btn-loader')
+};
 
-// State
-let currentSchema = null;
-let currentPageData = null;
+// State management
+const state = {
+  currentSchema: null,
+  currentPageData: null
+};
 
-// Initialize
-document.addEventListener('DOMContentLoaded', async () => {
-  // Load saved API key
-  const saved = await chrome.storage.local.get(['apiKey']);
-  if (saved.apiKey) {
-    apiKeyInput.value = saved.apiKey;
-  }
+// Initialize extension
+const init = async () => {
+  try {
+    // Load saved API key
+    const { apiKey } = await chrome.storage.local.get('apiKey');
+    if (apiKey) elements.apiKeyInput.value = apiKey;
 
-  // Get current page URL
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab && tab.url) {
-    urlInput.value = tab.url;
-  }
-
-  // Event Listeners
-  toggleKeyBtn.addEventListener('click', () => {
-    const type = apiKeyInput.type === 'password' ? 'text' : 'password';
-    apiKeyInput.type = type;
-    toggleKeyBtn.textContent = type === 'password' ? '👁️' : '🙈';
-  });
-
-  useCurrentPageBtn.addEventListener('click', async () => {
+    // Set current page URL
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab && tab.url) {
-      urlInput.value = tab.url;
+    if (tab?.url) elements.urlInput.value = tab.url;
+
+    setupEventListeners();
+  } catch (error) {
+    console.error('Initialization error:', error);
+    showError('Failed to initialize extension');
+  }
+};
+
+// Set up event listeners
+const setupEventListeners = () => {
+  // Toggle API key visibility
+  elements.toggleKeyBtn.addEventListener('click', () => {
+    const { apiKeyInput, toggleKeyBtn } = elements;
+    const isPassword = apiKeyInput.type === 'password';
+    apiKeyInput.type = isPassword ? 'text' : 'password';
+    toggleKeyBtn.textContent = isPassword ? '🙈' : '👁️';
+  });
+
+  // Use current page URL
+  elements.useCurrentPageBtn.addEventListener('click', async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.url) elements.urlInput.value = tab.url;
+    } catch (error) {
+      console.error('Error getting current page URL:', error);
     }
   });
 
-  generateBtn.addEventListener('click', handleGenerate);
-  copyBtn.addEventListener('click', handleCopy);
-  downloadTxtBtn.addEventListener('click', handleDownloadTxt);
-  downloadJsonBtn.addEventListener('click', handleDownloadJson);
-
-  // Save API key on change
-  apiKeyInput.addEventListener('blur', async () => {
-    if (apiKeyInput.value) {
-      await chrome.storage.local.set({ apiKey: apiKeyInput.value });
+  // Save API key on blur
+  elements.apiKeyInput.addEventListener('blur', async () => {
+    if (elements.apiKeyInput.value) {
+      await chrome.storage.local.set({ apiKey: elements.apiKeyInput.value });
     }
   });
-});
 
-async function handleGenerate() {
+  // Main action buttons
+  elements.generateBtn.addEventListener('click', handleGenerate);
+  elements.copyBtn.addEventListener('click', handleCopy);
+  elements.downloadTxtBtn.addEventListener('click', handleDownloadTxt);
+  elements.downloadJsonBtn.addEventListener('click', handleDownloadJson);
+};
+
+// Initialize when DOM is loaded
+document.addEventListener('DOMContentLoaded', init);
+
+const handleGenerate = async () => {
+  const { apiKeyInput, keywordsInput, urlInput, includePreviewCheckbox } = elements;
   const apiKey = apiKeyInput.value.trim();
   const keywords = keywordsInput.value.trim();
   const url = urlInput.value.trim();
   const includePreview = includePreviewCheckbox.checked;
 
-  // Validation
-  if (!apiKey) {
-    showError('Please enter your Google AI Studio API key');
-    return;
-  }
-
-  if (!url) {
-    showError('Please enter a URL');
-    return;
-  }
-
-  // Validate URL
+  // Input validation
+  if (!apiKey) return showError('Please enter your Google AI Studio API key');
+  if (!url) return showError('Please enter a URL');
+  
   try {
-    new URL(url);
+    new URL(url); // Validate URL format
   } catch {
-    showError('Please enter a valid URL');
-    return;
+    return showError('Please enter a valid URL');
   }
 
-  // Save API key
+  // Save API key and prepare UI
   await chrome.storage.local.set({ apiKey });
-
-  // Show loading state
   setLoading(true);
   hideError();
   hideResult();
 
   try {
-    // Extract page content
     const pageData = await extractPageContent(url);
-    currentPageData = pageData;
-
-    // Generate schema
-    const schema = await generateSchema(apiKey, url, pageData, keywords);
-    currentSchema = schema;
-
-    // Display result
-    showResult(schema, includePreview ? pageData : null);
+    state.currentPageData = pageData;
+    state.currentSchema = await generateSchema(apiKey, url, pageData, keywords);
+    showResult(state.currentSchema, includePreview ? pageData : null);
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Schema generation failed:', error);
     showError(error.message || 'Failed to generate schema. Please try again.');
   } finally {
     setLoading(false);
   }
-}
+};
 
-async function extractPageContent(url) {
-  // Check if URL is current page
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const isCurrentPage = tab && tab.url === url;
+const extractPageContent = async (url) => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const isCurrentPage = tab?.url === url;
 
-  if (isCurrentPage) {
-    // Inject content script and extract
-    try {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: extractContentFromDOM
-      });
-      return results[0].result;
-    } catch (error) {
-      // Fallback: fetch the page
-      return await fetchPageContent(url);
+    if (isCurrentPage) {
+      try {
+        const [result] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: extractContentFromDOM
+        });
+        return result.result;
+      } catch (error) {
+        console.warn('Content script injection failed, falling back to background fetch');
+        return fetchPageContent(url);
+      }
     }
-  } else {
-    // Fetch the page
-    return await fetchPageContent(url);
+    return fetchPageContent(url);
+  } catch (error) {
+    console.error('Error extracting page content:', error);
+    throw new Error('Failed to extract content from the page');
   }
-}
+};
 
 function extractContentFromDOM() {
   // Remove navigation and footer elements
@@ -224,120 +229,111 @@ async function fetchPageContent(url) {
   });
 }
 
-async function generateSchema(apiKey, url, pageData, seedKeywords) {
+const generateSchema = async (apiKey, url, pageData, seedKeywords) => {
   const MODEL = 'gemini-2.5-flash';
   const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
-
-  // Parse domain
-  const urlObj = new URL(url);
-  const domain = urlObj.hostname;
-
-  // Parse seed keywords
-  const keywords = seedKeywords
-    ? seedKeywords.split(/[,;]/).map(k => k.trim()).filter(Boolean)
-    : [];
-
-  // Build prompt
-  const prompt = buildPrompt(url, pageData, keywords, domain);
-
-  // Call Gemini API
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [{
-        parts: [{
-          text: prompt
-        }]
-      }],
-      systemInstruction: {
-        parts: [{
-          text: "You are an SEO and structured data assistant. Given a page's extracted content and seed keywords, write a concise WebPage JSON-LD that includes: description, keywords, and knowsAbout. Return JSON with fields: description, keywords (array), knowsAbout (array of objects with 'name' and 'description'), publisher (object with 'name', 'url', and 'knowsAbout' array of strings), and schema_jsonld (string). The schema_jsonld must be valid JSON-LD for schema.org WebPage. The description must reflect the page. Mix the seed keywords with new relevant ones. Avoid near-duplicates and keep them page-specific."
-        }]
-      }
-    })
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-  // Parse JSON from response
-  let jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-  if (!jsonMatch) {
-    jsonMatch = text.match(/(\{[\s\S]*\})/);
-  }
-
-  if (!jsonMatch) {
-    throw new Error('Model did not return valid JSON');
-  }
-
-  const result = JSON.parse(jsonMatch[1]);
-
-  // Build final schema
-  const schemaText = result.schema_jsonld || '';
-  let schemaObj;
-
+  
   try {
-    schemaObj = JSON.parse(schemaText);
-  } catch {
-    // Build schema from scratch
-    schemaObj = {
-      '@context': 'https://schema.org',
-      '@type': 'WebPage',
-      url: url,
-      mainEntityOfPage: url
-    };
-  }
+    const domain = new URL(url).hostname;
+    const keywords = seedKeywords ? seedKeywords.split(/[,;]/).map(k => k.trim()).filter(Boolean) : [];
+    const prompt = buildPrompt(url, pageData, keywords, domain);
 
-  // Update schema with final values
-  schemaObj.url = url;
-  schemaObj.mainEntityOfPage = url;
-  if (pageData.title) schemaObj.name = pageData.title;
-  schemaObj.description = result.description || '';
-  schemaObj.keywords = result.keywords?.join(', ') || '';
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        systemInstruction: {
+          parts: [{
+            text: "You are an SEO and structured data assistant. Given a page's extracted content and seed keywords, write a concise WebPage JSON-LD that includes: description, keywords, and knowsAbout. Return JSON with fields: description, keywords (array), knowsAbout (array of objects with 'name' and 'description'), publisher (object with 'name', 'url', and 'knowsAbout' array of strings), and schema_jsonld (string). The schema_jsonld must be valid JSON-LD for schema.org WebPage. The description must reflect the page. Mix the seed keywords with new relevant ones. Avoid near-duplicates and keep them page-specific."
+          }]
+        }
+      })
+    });
 
-  if (result.publisher) {
-    schemaObj.publisher = {
-      '@type': 'Organization',
-      name: result.publisher.name || '',
-      url: result.publisher.url || `https://${domain}`,
-      knowsAbout: result.publisher.knowsAbout || []
-    };
-  }
-
-  if (result.knowsAbout && result.knowsAbout.length > 0) {
-    schemaObj.about = result.knowsAbout.map(entity => ({
-      '@type': 'Thing',
-      name: entity.name || '',
-      description: entity.description || ''
-    })).filter(e => e.name);
-  }
-
-  // Remove null/undefined values
-  Object.keys(schemaObj).forEach(key => {
-    if (schemaObj[key] === null || schemaObj[key] === undefined || schemaObj[key] === '') {
-      delete schemaObj[key];
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error?.message || `API error: ${response.status}`);
     }
-  });
 
-  return {
-    schema: schemaObj,
-    description: result.description || '',
-    keywords: result.keywords || [],
-    knowsAbout: result.knowsAbout || [],
-    publisher: result.publisher
-  };
-}
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/) || text.match(/(\{[\s\S]*\})/);
+    
+    if (!jsonMatch) throw new Error('Model did not return valid JSON');
+    const result = JSON.parse(jsonMatch[1]);
+    
+    // Process schema
+    const schemaText = result.schema_jsonld || '';
+    let schemaObj;
 
-function buildPrompt(url, page, seedKeywords, domainHint) {
-  return `URL: ${url}
+    try {
+      schemaObj = JSON.parse(schemaText);
+    } catch {
+      schemaObj = {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        url,
+        mainEntityOfPage: url,
+        ...(pageData.title && { name: pageData.title })
+      };
+    }
+
+    // Update schema with final values
+    const finalSchema = {
+      ...schemaObj,
+      url,
+      mainEntityOfPage: url,
+      ...(pageData.title && { name: pageData.title }),
+      description: result.description || '',
+      keywords: result.keywords?.join(', ') || ''
+    };
+
+    // Add publisher if available
+    if (result.publisher) {
+      finalSchema.publisher = {
+        '@type': 'Organization',
+        name: result.publisher.name || '',
+        url: result.publisher.url || `https://${domain}`,
+        knowsAbout: result.publisher.knowsAbout || []
+      };
+    }
+
+    // Add knowsAbout if available
+    if (result.knowsAbout?.length > 0) {
+      finalSchema.about = result.knowsAbout
+        .map(entity => ({
+          '@type': 'Thing',
+          name: entity.name || '',
+          description: entity.description || ''
+        }))
+        .filter(e => e.name);
+    }
+
+    // Clean up null/undefined/empty values
+    Object.keys(finalSchema).forEach(key => {
+      if (finalSchema[key] === null || finalSchema[key] === undefined || finalSchema[key] === '') {
+        delete finalSchema[key];
+      }
+    });
+
+    return {
+      schema: finalSchema,
+      description: result.description || '',
+      keywords: result.keywords || [],
+      knowsAbout: result.knowsAbout || [],
+      publisher: result.publisher
+    };
+  } catch (error) {
+    console.error('Schema generation error:', error);
+    throw new Error(`Failed to generate schema: ${error.message}`);
+  }
+};
+
+const buildPrompt = (url, page, seedKeywords, domainHint) => `
+URL: ${url}
 Domain: ${domainHint}
 
 Title: ${page.title || ''}
@@ -384,92 +380,105 @@ Task:
 
 Return JSON with keys: description, keywords (array of strings), knowsAbout (array of objects with 'name' and 'description'), publisher (object with 'name', 'url', and 'knowsAbout' array of strings), schema_jsonld (string).
 Only return JSON. No commentary.`;
-}
 
-function showResult(schema, pageData) {
-  const schemaText = JSON.stringify(schema.schema, null, 2);
-  const wrappedSchema = `<script type="application/ld+json">\n${schemaText}\n</script>`;
+// UI Helpers
+const showResult = (schema, pageData) => {
+  try {
+    const { resultContent, resultCard, urlInput } = elements;
+    const schemaText = JSON.stringify(schema.schema, null, 2);
+    const wrappedSchema = `<script type="application/ld+json">\n${schemaText}\n</script>`;
+    
+    let displayText = wrappedSchema;
+    if (pageData) {
+      const preview = `URL: ${urlInput.value}\n\n${wrappedSchema}\n\n---\n\nPage Preview:\nTitle: ${pageData.title || 'N/A'}\nMeta: ${pageData.meta_description || 'N/A'}\nH1: ${pageData.h1?.join(', ') || 'N/A'}\n\nContent: ${pageData.content?.substring(0, 500) || 'No content extracted'}...`;
+      displayText = preview;
+    }
 
-  let displayText = wrappedSchema;
-  if (pageData) {
-    displayText = `URL: ${urlInput.value}\n\n${wrappedSchema}\n\n---\n\nPage Preview:\nTitle: ${pageData.title}\nMeta: ${pageData.meta_description}\nH1: ${pageData.h1.join(', ')}\n\nContent: ${pageData.content.substring(0, 500)}...`;
+    resultContent.textContent = displayText;
+    resultCard.style.display = 'block';
+    resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (error) {
+    console.error('Error displaying result:', error);
+    showError('Failed to display results');
   }
+};
 
-  resultContent.textContent = displayText;
-  resultCard.style.display = 'block';
-  resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
+const hideResult = () => {
+  elements.resultCard.style.display = 'none';
+};
 
-function hideResult() {
-  resultCard.style.display = 'none';
-}
+const showError = (message) => {
+  elements.errorMessage.textContent = message;
+  elements.errorCard.style.display = 'block';
+  elements.errorCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
 
-function showError(message) {
-  errorMessage.textContent = message;
-  errorCard.style.display = 'block';
-  errorCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
+const hideError = () => {
+  elements.errorCard.style.display = 'none';
+};
 
-function hideError() {
-  errorCard.style.display = 'none';
-}
-
-function setLoading(loading) {
+const setLoading = (loading) => {
+  const { generateBtn, btnText, btnLoader } = elements;
   generateBtn.disabled = loading;
-  const btnText = generateBtn.querySelector('.btn-text');
-  const btnLoader = generateBtn.querySelector('.btn-loader');
+  btnText.style.display = loading ? 'none' : 'inline-block';
+  btnLoader.style.display = loading ? 'inline-block' : 'none';
+  generateBtn.classList.toggle('loading', loading);
+};
+
+// File handling utilities
+const handleCopy = async () => {
+  if (!state.currentSchema?.schema) return;
   
-  if (loading) {
-    btnText.style.display = 'none';
-    btnLoader.style.display = 'inline-block';
-    generateBtn.classList.add('loading');
-  } else {
-    btnText.style.display = 'inline-block';
-    btnLoader.style.display = 'none';
-    generateBtn.classList.remove('loading');
-  }
-}
-
-function handleCopy() {
-  if (!currentSchema) return;
-
-  const schemaText = JSON.stringify(currentSchema.schema, null, 2);
-  const wrappedSchema = `<script type="application/ld+json">\n${schemaText}\n</script>`;
-
-  navigator.clipboard.writeText(wrappedSchema).then(() => {
-    copyBtn.textContent = '✓ Copied!';
+  try {
+    const schemaText = JSON.stringify(state.currentSchema.schema, null, 2);
+    const wrappedSchema = `<script type="application/ld+json">\n${schemaText}\n</script>`;
+    
+    await navigator.clipboard.writeText(wrappedSchema);
+    
+    const originalText = elements.copyBtn.textContent;
+    elements.copyBtn.textContent = '✓ Copied!';
     setTimeout(() => {
-      copyBtn.textContent = '📋 Copy';
+      elements.copyBtn.textContent = originalText;
     }, 2000);
-  });
-}
+  } catch (error) {
+    console.error('Failed to copy to clipboard:', error);
+    showError('Failed to copy to clipboard');
+  }
+};
 
-function handleDownloadTxt() {
-  if (!currentSchema) return;
+const downloadFile = (content, filename, type) => {
+  try {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  } catch (error) {
+    console.error('Download failed:', error);
+    showError('Failed to download file');
+  }
+};
 
-  const schemaText = JSON.stringify(currentSchema.schema, null, 2);
+const handleDownloadTxt = () => {
+  if (!state.currentSchema?.schema) return;
+  
+  const schemaText = JSON.stringify(state.currentSchema.schema, null, 2);
   const wrappedSchema = `<script type="application/ld+json">\n${schemaText}\n</script>`;
-  const content = `${urlInput.value}\n${wrappedSchema}`;
+  const content = `${elements.urlInput.value}\n${wrappedSchema}`;
+  
+  downloadFile(content, 'schema.txt', 'text/plain');
+};
 
-  const blob = new Blob([content], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'schema.txt';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function handleDownloadJson() {
-  if (!currentSchema) return;
-
-  const content = JSON.stringify(currentSchema.schema, null, 2);
-  const blob = new Blob([content], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'schema.json';
-  a.click();
-  URL.revokeObjectURL(url);
-}
+const handleDownloadJson = () => {
+  if (!state.currentSchema?.schema) return;
+  
+  const content = JSON.stringify(state.currentSchema.schema, null, 2);
+  downloadFile(content, 'schema.json', 'application/json');
+};
 

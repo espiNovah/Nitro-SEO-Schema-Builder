@@ -1,0 +1,529 @@
+/* ============================================
+   DARK MODE VARIANT
+   Apple-Inspired Glassmorphism - Dark Theme
+   Add this to your styles.css for dark mode support
+   ============================================ */
+
+/* Dark mode media query */
+@media (prefers-color-scheme: dark) {
+    :root {
+        /* ===== Dark Glass Properties ===== */
+        --glass-bg: rgba(30, 30, 30, 0.65);
+        --glass-bg-solid: rgba(30, 30, 30, 0.85);
+        --glass-border: rgba(255, 255, 255, 0.12);
+        --glass-border-light: rgba(255, 255, 255, 0.18);
+
+        /* ===== Dark Shadows ===== */
+        --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+        --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.4);
+        --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.5);
+
+        /* ===== Dark Colors ===== */
+        --text-primary: #f5f5f7;
+        --text-secondary: #a1a1a6;
+        --text-tertiary: #6e6e73;
+        --bg-primary: #0a0a0a;
+
+        /* ===== Orange Accent (slightly brighter for dark mode) ===== */
+        --accent: #FF7A1F;
+        --accent-hover: #FF8C3D;
+        --accent-light: rgba(255, 122, 31, 0.15);
+        --accent-glow: rgba(255, 122, 31, 0.4);
+
+        /* ===== Dark Status Colors ===== */
+        --success: #30D158;
+        --error: #FF453A;
+        --warning: #FFD60A;
+        --info: #0A84FF;
+    }
+
+    /* Clean dark background */
+    body::before {
+        background: #0a0a0a;
+    }
+
+    /* Dark mode input adjustments */
+    input[type="text"],
+    input[type="url"],
+    input[type="password"],
+    input[type="number"],
+    input[type="date"],
+    input[type="time"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="datetime-local"],
+    textarea,
+    .select-input {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow:
+            0 2px 8px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        color: var(--text-primary);
+    }
+
+    input:focus,
+    textarea:focus,
+    .select-input:focus {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: var(--accent);
+        box-shadow:
+            0 0 0 3px var(--accent-light),
+            0 4px 12px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    /* Dark mode cards */
+    .card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(14px) saturate(180%);
+        -webkit-backdrop-filter: blur(14px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        /* box-shadow:
+            var(--shadow-md),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05); */
+    }
+
+    .card:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Dark mode buttons */
+    .btn-secondary {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow:
+            0 2px 8px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        color: var(--text-primary);
+    }
+
+    .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.08);
+        transform: translateY(-1px);
+        box-shadow:
+            0 4px 16px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Dark mode result/history items */
+    .result-item,
+    .history-item {
+        background: rgba(30, 30, 30, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .result-item:hover,
+    .history-item:hover {
+        background: rgba(30, 30, 30, 0.8);
+    }
+
+    /* Dark mode code blocks */
+    .result-item-content,
+    .result-content {
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: var(--text-primary);
+    }
+
+    .result-item-content::-webkit-scrollbar-track,
+    .result-content::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.3);
+    }
+
+    .result-item-content::-webkit-scrollbar-thumb,
+    .result-content::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    .result-item-content::-webkit-scrollbar-thumb:hover,
+    .result-content::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Dark mode modal */
+    .modal {
+        background: rgba(0, 0, 0, 0.7);
+    }
+
+    .modal-content {
+        background: rgba(30, 30, 30, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .modal-close {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: var(--text-secondary);
+    }
+
+    .modal-close:hover {
+        background: rgba(255, 255, 255, 0.15);
+        color: var(--text-primary);
+    }
+
+    /* Dark mode schema fields */
+    .schema-field {
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* Dark mode file upload */
+    .file-upload-area {
+        background: rgba(30, 30, 30, 0.4);
+        border: 2px dashed rgba(255, 255, 255, 0.15);
+    }
+
+    .file-upload-area:hover,
+    .file-upload-area.dragover {
+        background: rgba(30, 30, 30, 0.6);
+        border-color: var(--accent);
+    }
+
+    .file-info {
+        background: rgba(50, 50, 50, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Dark mode progress bar */
+    .progress-bar-container {
+        background: rgba(50, 50, 50, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Dark mode CSV format example */
+    .csv-format-example {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Dark mode sidebar */
+    .sidebar {
+        background: rgba(30, 30, 30, 0.9);
+        border-right: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .sidebar-header,
+    .sidebar-footer {
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .menu-item:hover {
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    /* Dark mode header */
+    .top-header {
+        background: rgba(30, 30, 30, 0.8);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .menu-toggle {
+        background: rgba(50, 50, 50, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .menu-toggle:hover {
+        background: rgba(50, 50, 50, 0.9);
+    }
+
+    /* Dark mode empty state */
+    .empty-state {
+        background: rgba(30, 30, 30, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* Templates */
+    .template-card {
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .template-card:hover {
+        background: rgba(30, 30, 30, 0.85);
+        border-color: rgba(255, 255, 255, 0.12);
+    }
+}
+
+/* ============================================
+   MANUAL DARK MODE TOGGLE (Optional)
+   Add a toggle button and use this class
+   ============================================ */
+
+body.dark-mode {
+    /* ===== Dark Glass Properties ===== */
+    --glass-bg: rgba(30, 30, 30, 0.65);
+    --glass-bg-solid: rgba(30, 30, 30, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-border-light: rgba(255, 255, 255, 0.18);
+
+    /* ===== Dark Shadows ===== */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.5);
+
+    /* ===== Dark Colors ===== */
+    --text-primary: #f5f5f7;
+    --text-secondary: #a1a1a6;
+    --text-tertiary: #6e6e73;
+    --bg-primary: #0a0a0a;
+
+    /* ===== Orange Accent (slightly brighter for dark mode) ===== */
+    --accent: #FF7A1F;
+    --accent-hover: #FF8C3D;
+    --accent-light: rgba(255, 122, 31, 0.15);
+    --accent-glow: rgba(255, 122, 31, 0.4);
+
+    /* ===== Dark Status Colors ===== */
+    --success: #30D158;
+    --error: #FF453A;
+    --warning: #FFD60A;
+    --info: #0A84FF;
+}
+
+body.dark-mode::before {
+    background: #0a0a0a;
+}
+
+body.dark-mode input[type="text"],
+body.dark-mode input[type="url"],
+body.dark-mode input[type="password"],
+body.dark-mode input[type="number"],
+body.dark-mode input[type="date"],
+body.dark-mode input[type="time"],
+body.dark-mode input[type="email"],
+body.dark-mode input[type="tel"],
+body.dark-mode input[type="datetime-local"],
+body.dark-mode textarea,
+body.dark-mode .select-input {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+body.dark-mode input:focus,
+body.dark-mode textarea:focus,
+body.dark-mode .select-input:focus {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--accent);
+    box-shadow:
+        0 0 0 3px var(--accent-light),
+        0 4px 12px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+body.dark-mode .card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(14px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    /* box-shadow:
+        var(--shadow-md),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05); */
+}
+
+body.dark-mode .card:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+body.dark-mode .btn-secondary {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+body.dark-mode .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-1px);
+    box-shadow:
+        0 4px 16px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+body.dark-mode .result-item,
+body.dark-mode .history-item {
+    background: rgba(30, 30, 30, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body.dark-mode .result-item:hover,
+body.dark-mode .history-item:hover {
+    background: rgba(30, 30, 30, 0.8);
+}
+
+body.dark-mode .result-item-content,
+body.dark-mode .result-content {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+body.dark-mode .result-item-content::-webkit-scrollbar-track,
+body.dark-mode .result-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode .result-item-content::-webkit-scrollbar-thumb,
+body.dark-mode .result-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+body.dark-mode .result-item-content::-webkit-scrollbar-thumb:hover,
+body.dark-mode .result-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+body.dark-mode .modal {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+body.dark-mode .modal-content {
+    background: rgba(30, 30, 30, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .modal-close {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+}
+
+body.dark-mode .modal-close:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--text-primary);
+}
+
+/* body.dark-mode .schema-field {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+} */
+
+body.dark-mode .file-upload-area {
+    background: rgba(30, 30, 30, 0.4);
+    border: 2px dashed rgba(255, 255, 255, 0.15);
+}
+
+body.dark-mode .file-upload-area:hover,
+body.dark-mode .file-upload-area.dragover {
+    background: rgba(30, 30, 30, 0.6);
+    border-color: var(--accent);
+}
+
+body.dark-mode .file-info {
+    background: rgba(50, 50, 50, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .progress-bar-container {
+    background: rgba(50, 50, 50, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .csv-format-example {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .sidebar {
+    background: rgba(30, 30, 30, 0.9);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body.dark-mode .sidebar-header,
+body.dark-mode .sidebar-footer {
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-mode .menu-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-mode .top-header {
+    background: rgba(30, 30, 30, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body.dark-mode .menu-toggle {
+    background: rgba(50, 50, 50, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .menu-toggle:hover {
+    background: rgba(50, 50, 50, 0.9);
+}
+
+body.dark-mode .empty-state {
+    background: rgba(30, 30, 30, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Templates */
+body.dark-mode .template-card {
+    /* border-color: rgba(255, 255, 255, 0.08); */
+}
+
+body.dark-mode .template-card:hover {
+    background: rgba(30, 30, 30, 0.85);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Ensure toggle button looks good in dark mode */
+body.dark-mode .theme-toggle {
+    background: rgba(50, 50, 50, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .theme-toggle:hover {
+    background: rgba(50, 50, 50, 0.9);
+}
+
+/* Example toggle button styles */
+.theme-toggle {
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-xs);
+    cursor: pointer;
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.theme-toggle:hover {
+    background: rgba(255, 255, 255, 0.9);
+    transform: translateY(-1px);
+}
+
+/* Dark mode toggle button */
+@media (prefers-color-scheme: dark) {
+    .theme-toggle {
+        background: rgba(50, 50, 50, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .theme-toggle:hover {
+        background: rgba(50, 50, 50, 0.9);
+    }
+}

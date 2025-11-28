@@ -1,129 +1,224 @@
+// Configuration
+const CONFIG = {
+  extractionTimeout: 10000, // 10 seconds
+  maxLoadAttempts: 60,      // 30 seconds max (60 * 500ms)
+  checkInterval: 500,       // Check every 500ms
+  initialDelay: 1000,       // Initial delay before checking page load
+  dynamicContentDelay: 2000 // Additional delay for dynamic content
+};
+
+// Blocked URL patterns
+const BLOCKED_URL_PATTERNS = [
+  'chrome://*',
+  'chrome-extension://*',
+  'moz-extension://*',
+  'edge://*',
+  'about:*',
+  'file://*'
+];
+
 // Background service worker for Nitro SEO Schema Builder
+
+/**
+ * Check if a URL is blocked
+ * @param {string} url - The URL to check
+ * @returns {boolean} True if the URL is blocked
+ */
+function isUrlBlocked(url) {
+  if (!url) return true;
+  return BLOCKED_URL_PATTERNS.some(pattern => 
+    new RegExp(`^${pattern.replace(/\*/g, '.*')}`).test(url)
+  );
+}
+
+/**
+ * Create a promise that resolves after a delay
+ * @param {number} ms - Delay in milliseconds
+ * @returns {Promise<void>}
+ */
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 // Handle extension icon click to open new tab
 chrome.action.onClicked.addListener((tab) => {
   chrome.tabs.create({
     url: chrome.runtime.getURL('index.html'),
     active: true
+  }).catch(error => {
+    console.error('Failed to create new tab:', error);
   });
 });
+
+// Handle messages from content scripts and popup
+const messageHandlers = {
+  async fetchPage(url) {
+    try {
+      const data = await fetchPage(url);
+      return { data };
+    } catch (error) {
+      console.error('Error in fetchPage handler:', error);
+      return { error: error.message };
+    }
+  }
+};
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'fetchPage') {
-    fetchPage(request.url)
-      .then(data => sendResponse({ data }))
-      .catch(error => sendResponse({ error: error.message }));
-    return true; // Keep channel open for async response
+  if (request.action && messageHandlers[request.action]) {
+    const handler = messageHandlers[request.action];
+    handler(request.url || request.data)
+      .then(sendResponse)
+      .catch(error => ({
+        error: error.message || 'An unknown error occurred'
+      }));
+    return true; // Keep the message channel open for async response
   }
+  return false;
 });
 
-async function fetchPage(url) {
-  // Use tab-based approach to bypass CORS
-  // Create a hidden tab, extract content, then close it
-  return new Promise((resolve, reject) => {
-    chrome.tabs.create({
-      url: url,
-      active: false
-    }, (tab) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-
-      // Wait for page to load, then extract content
-      const tabId = tab.id;
-      
-      const extractContent = () => {
-        // Set a timeout for the extraction itself
-        const extractionTimeout = setTimeout(() => {
-          chrome.tabs.remove(tabId, () => {
-            if (chrome.runtime.lastError) {
-              // Tab might already be closed
-            }
-          });
-          reject(new Error('Timeout: Content extraction took too long'));
-        }, 10000); // 10 second timeout for extraction
-        
-        chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          func: extractContentFromDOM
-        }, (results) => {
-          clearTimeout(extractionTimeout);
-          
-          // Close the tab
-          chrome.tabs.remove(tabId, () => {
-            if (chrome.runtime.lastError) {
-              // Tab might already be closed, continue anyway
-            }
-          });
-
-          if (chrome.runtime.lastError) {
-            reject(new Error(`Failed to extract content: ${chrome.runtime.lastError.message}`));
-          } else if (results && results[0] && results[0].result) {
-            resolve(results[0].result);
-          } else {
-            reject(new Error('Failed to extract page content'));
+/**
+ * Safely remove a tab by ID
+ * @param {number} tabId - The ID of the tab to remove
+ * @returns {Promise<void>}
+ */
+async function safeRemoveTab(tabId) {
+  if (!tabId) return;
+  
+  try {
+    await new Promise((resolve) => {
+      chrome.tabs.remove(tabId, () => {
+        if (chrome.runtime.lastError) {
+          // Ignore errors about non-existent tabs
+          if (!chrome.runtime.lastError.message.includes('No tab with id')) {
+            console.warn('Error removing tab:', chrome.runtime.lastError);
           }
-        });
-      };
-
-      // Wait for page to load
-      let checkAttempts = 0;
-      const maxAttempts = 120; // 60 seconds max (120 * 500ms)
-      let timeoutId = null;
-      
-      const cleanup = () => {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-          timeoutId = null;
         }
-      };
-      
-      const checkComplete = () => {
-        checkAttempts++;
-        chrome.tabs.get(tabId, (tab) => {
-          if (chrome.runtime.lastError) {
-            cleanup();
-            chrome.tabs.remove(tabId);
-            reject(new Error('Tab was closed before content could be extracted'));
-            return;
-          }
-
-          // Check if URL is blocked (chrome://, extension://, etc.)
-          if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('moz-extension://'))) {
-            cleanup();
-            chrome.tabs.remove(tabId);
-            reject(new Error('Cannot access this URL type (chrome:// or extension pages are not allowed)'));
-            return;
-          }
-
-          if (tab.status === 'complete') {
-            cleanup();
-            // Give it a moment for dynamic content to load
-            // Some pages load content via JavaScript after page load
-            setTimeout(() => {
-              extractContent();
-            }, 2000); // Increased wait time for dynamic content
-          } else if (checkAttempts < maxAttempts) {
-            // Check again in 500ms
-            timeoutId = setTimeout(checkComplete, 500);
-          } else {
-            // Timeout - try to extract anyway in case page is partially loaded
-            cleanup();
-            console.warn(`Page ${url} took too long to load, attempting extraction anyway...`);
-            setTimeout(() => {
-              extractContent();
-            }, 1000);
-          }
-        });
-      };
-
-      // Start checking after a short delay
-      timeoutId = setTimeout(checkComplete, 1000);
+        resolve();
+      });
     });
-  });
+  } catch (error) {
+    console.warn('Error in safeRemoveTab:', error);
+  }
 }
 
+/**
+ * Extract content from the current tab
+ * @param {number} tabId - The ID of the tab to extract content from
+ * @returns {Promise<Object>} The extracted content
+ */
+async function extractContent(tabId) {
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: extractContentFromDOM
+    });
+    
+    if (!result?.result) {
+      throw new Error('No content was extracted from the page');
+    }
+    
+    return result.result;
+  } catch (error) {
+    console.error('Content extraction failed:', error);
+    throw new Error(`Failed to extract content: ${error.message}`);
+  }
+}
+
+/**
+ * Wait for a tab to finish loading
+ * @param {number} tabId - The ID of the tab to wait for
+ * @returns {Promise<boolean>} True if the page loaded successfully, false if timed out
+ */
+async function waitForPageLoad(tabId) {
+  let attempts = 0;
+  
+  while (attempts < CONFIG.maxLoadAttempts) {
+    const tab = await new Promise(resolve => {
+      chrome.tabs.get(tabId, tab => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+        } else {
+          resolve(tab);
+        }
+      });
+    });
+    
+    if (!tab) {
+      throw new Error('Tab was closed before loading completed');
+    }
+    
+    if (tab.status === 'complete') {
+      // Additional delay for dynamic content
+      await delay(CONFIG.dynamicContentDelay);
+      return true;
+    }
+    
+    attempts++;
+    await delay(CONFIG.checkInterval);
+  }
+  
+  return false;
+}
+
+/**
+ * Fetch page content by creating a hidden tab and extracting content
+ * @param {string} url - The URL to fetch content from
+ * @returns {Promise<Object>} The extracted page content
+ */
+async function fetchPage(url) {
+  if (isUrlBlocked(url)) {
+    throw new Error('Access to this URL type is not allowed');
+  }
+
+  let tabId;
+  let timeoutId;
+  
+  try {
+    // Create a new tab
+    const tab = await new Promise((resolve, reject) => {
+      chrome.tabs.create({ url, active: false }, (tab) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(tab);
+        }
+      });
+    });
+    
+    tabId = tab.id;
+    
+    // Wait for page to load with timeout
+    const pageLoaded = await Promise.race([
+      waitForPageLoad(tabId),
+      delay(CONFIG.extractionTimeout).then(() => false)
+    ]);
+    
+    if (!pageLoaded) {
+      console.warn(`Page ${url} took too long to load, attempting extraction anyway...`);
+    }
+    
+    // Extract content with timeout
+    const content = await Promise.race([
+      extractContent(tabId),
+      delay(CONFIG.extractionTimeout).then(() => {
+        throw new Error('Content extraction timed out');
+      })
+    ]);
+    
+    return content;
+    
+  } catch (error) {
+    console.error('Error in fetchPage:', error);
+    throw error;
+    
+  } finally {
+    // Cleanup
+    if (timeoutId) clearTimeout(timeoutId);
+    if (tabId) await safeRemoveTab(tabId);
+  }
+}
+
+// Function to extract content from DOM (injected into page)
 // Function to extract content from DOM (injected into page)
 function extractContentFromDOM() {
   // Remove navigation and footer elements
@@ -153,6 +248,20 @@ function extractContentFromDOM() {
   const metaDesc = clone.querySelector('meta[name="description"]')?.getAttribute('content')?.trim() || '';
   const h1s = Array.from(clone.querySelectorAll('h1')).map(h => h.textContent.trim()).filter(Boolean);
 
+  // Extract dates
+  const datePublished = clone.querySelector('meta[property="article:published_time"]')?.getAttribute('content') ||
+                       clone.querySelector('meta[name="datePublished"]')?.getAttribute('content') ||
+                       clone.querySelector('time[itemprop="datePublished"]')?.getAttribute('datetime');
+                       
+  const dateModified = clone.querySelector('meta[property="article:modified_time"]')?.getAttribute('content') ||
+                      clone.querySelector('meta[name="dateModified"]')?.getAttribute('content') ||
+                      clone.querySelector('time[itemprop="dateModified"]')?.getAttribute('datetime');
+
+  // Extract author
+  const author = clone.querySelector('meta[name="author"]')?.getAttribute('content') ||
+                clone.querySelector('meta[property="article:author"]')?.getAttribute('content') ||
+                clone.querySelector('[rel="author"]')?.textContent?.trim();
+
   // Get main content
   const mainContent = clone.querySelector('main') || clone.querySelector('article') || clone.querySelector('[role="main"]') || clone.body;
   const textContent = mainContent.textContent || '';
@@ -162,48 +271,46 @@ function extractContentFromDOM() {
   const faqs = [];
   const jsonLdScripts = clone.querySelectorAll('script[type="application/ld+json"]');
   
-  // Extract logo from various meta tags
+  // Extract logo - be more specific to avoid article images
   let logo = '';
-  // Try Open Graph image
-  const ogImage = clone.querySelector('meta[property="og:image"]')?.getAttribute('content');
-  if (ogImage) logo = ogImage;
-  // Try Twitter image
+  
+  // 1. Try JSON-LD Organization logo first (most accurate)
+  jsonLdScripts.forEach(script => {
+    try {
+      const data = JSON.parse(script.textContent);
+      const items = Array.isArray(data) ? data : [data];
+      items.forEach(item => {
+        if (item['@type'] === 'Organization' && item.logo) {
+          if (typeof item.logo === 'string') {
+            logo = item.logo;
+          } else if (item.logo.url) {
+            logo = item.logo.url;
+          }
+        }
+      });
+    } catch (e) {
+      // Ignore
+    }
+  });
+
+  // 2. Try specific logo classes/IDs if no JSON-LD logo
   if (!logo) {
-    const twitterImage = clone.querySelector('meta[name="twitter:image"]')?.getAttribute('content') || 
-                        clone.querySelector('meta[property="twitter:image"]')?.getAttribute('content');
-    if (twitterImage) logo = twitterImage;
+    const logoImg = clone.querySelector('.logo img, #logo img, img[alt*="logo" i], img[class*="logo" i]');
+    if (logoImg) logo = logoImg.src;
   }
-  // Try Apple touch icon
+
+  // 3. Try favicon/apple-touch-icon as fallback (better than random article image)
   if (!logo) {
     const appleIcon = clone.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href');
     if (appleIcon) logo = appleIcon;
   }
-  // Try favicon
+  
   if (!logo) {
     const favicon = clone.querySelector('link[rel="icon"]')?.getAttribute('href') || 
                    clone.querySelector('link[rel="shortcut icon"]')?.getAttribute('href');
     if (favicon) logo = favicon;
   }
-  // Try logo in JSON-LD
-  if (!logo) {
-    jsonLdScripts.forEach(script => {
-      try {
-        const data = JSON.parse(script.textContent);
-        const items = Array.isArray(data) ? data : [data];
-        items.forEach(item => {
-          if (item['@type'] === 'Organization' && item.logo) {
-            if (typeof item.logo === 'string') {
-              logo = item.logo;
-            } else if (item.logo.url) {
-              logo = item.logo.url;
-            }
-          }
-        });
-      } catch (e) {
-        // Ignore
-      }
-    });
-  }
+
   // Make logo absolute URL if relative
   if (logo && !logo.startsWith('http')) {
     try {
@@ -213,6 +320,8 @@ function extractContentFromDOM() {
       // Ignore URL parsing errors
     }
   }
+
+  // Extract FAQs
   jsonLdScripts.forEach(script => {
     try {
       const data = JSON.parse(script.textContent);
@@ -232,7 +341,7 @@ function extractContentFromDOM() {
     }
   });
 
-  // Extract FAQs from DOM
+  // Extract FAQs from DOM if none found in JSON-LD
   if (faqs.length === 0) {
     clone.querySelectorAll('details').forEach(details => {
       const summary = details.querySelector('summary');
@@ -250,7 +359,10 @@ function extractContentFromDOM() {
     h1: h1s,
     content: cleanedText,
     faqs,
-    logo: logo || ''
+    logo: logo || '',
+    author,
+    datePublished,
+    dateModified
   };
 }
 

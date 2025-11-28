@@ -6,6 +6,44 @@
 const MAX_URLS = 20;
 const MODEL = 'gemini-2.0-flash';
 
+// Templates
+const TEMPLATES = {
+  'WebPage': {
+    name: 'Software Product Page',
+    description: 'Ideal for software collections or product landing pages',
+    schema: {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "url": "https://softwarecw.com/collections/office-suites-software",
+      "name": "Office Suites Software - SoftwareCW",
+      "description": "Explore and download a variety of Microsoft Office Suite programs, including Microsoft 365 Personal, Family, and Business Standard, as well as older versions like Office Home and Student 2010, 2021, and Office Home and Business 2013, 2016 for Windows and Mac.",
+      "keywords": "ms office suite programs, Microsoft 365, Office Home and Student, Office Home and Business, productivity software, Word, Excel, PowerPoint, Windows software, Mac software, office desktop software, download office suite, Microsoft software, business productivity tools, office suite download",
+      "mainEntityOfPage": "https://softwarecw.com/collections/office-suites-software",
+      "publisher": {
+        "@type": "Organization",
+        "name": "SoftwareCW",
+        "url": "https://softwarecw.com",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://softwarecw.com/cdn/shop/files/Original_Rectangle_Logo_09fda69e-ecd2-4353-85a1-6247c54a429e.png"
+        },
+        "knowsAbout": [
+          "Software",
+          "Office Suites",
+          "Productivity Tools"
+        ]
+      },
+      "about": [
+        {
+          "@type": "Thing",
+          "name": "Microsoft Office Suite",
+          "description": "A suite of applications designed for productivity tasks, including word processing, spreadsheets, and presentations."
+        }
+      ]
+    }
+  }
+};
+
 // State
 let currentSchema = null;
 let currentPageData = null;
@@ -126,7 +164,7 @@ const elements = {
   sidebar: document.querySelector('.sidebar'),
   pageTitle: document.getElementById('pageTitle'),
   pageSections: document.querySelectorAll('.page-section'),
-  
+
   // Builder Page
   apiKey: document.getElementById('apiKey'),
   apiKeyHeader: document.getElementById('apiKeyHeader'),
@@ -136,7 +174,7 @@ const elements = {
   pageUrl: document.getElementById('pageUrl'),
   schemaFields: document.getElementById('schemaFields'),
   generateBtn: document.getElementById('generateBtn'),
-  
+
   // Batch Page
   batchSchemaType: document.getElementById('batchSchemaType'),
   csvFile: document.getElementById('csvFile'),
@@ -156,7 +194,8 @@ const elements = {
   resultsList: document.getElementById('resultsList'),
   downloadAllBtn: document.getElementById('downloadAllBtn'),
   downloadAllJsonBtn: document.getElementById('downloadAllJsonBtn'),
-  
+  downloadSampleBtn: document.getElementById('downloadSampleBtn'),
+
   // Modal
   resultModal: document.getElementById('resultModal'),
   closeModal: document.getElementById('closeModal'),
@@ -164,10 +203,19 @@ const elements = {
   copyBtn: document.getElementById('copyBtn'),
   downloadTxtBtn: document.getElementById('downloadTxtBtn'),
   downloadJsonBtn: document.getElementById('downloadJsonBtn'),
-  
+
   // History
   historyList: document.getElementById('historyList'),
-  
+  deleteAllBtn: document.getElementById('deleteAllBtn'),
+
+  // Confirmation Modal
+  confirmModal: document.getElementById('confirmModal'),
+  confirmTitle: document.getElementById('confirmTitle'),
+  confirmMessage: document.getElementById('confirmMessage'),
+  confirmDelete: document.getElementById('confirmDelete'),
+  confirmCancel: document.getElementById('confirmCancel'),
+  closeConfirm: document.getElementById('closeConfirm'),
+
   // Error
   errorToast: document.getElementById('errorToast'),
   errorMessage: document.getElementById('errorMessage'),
@@ -184,7 +232,7 @@ async function initializeApp() {
   if (!elements.resultsList) {
     console.error('resultsList element not found. Page may not be fully loaded.');
   }
-  
+
   // Load saved API key and sync to both fields
   const saved = await chrome.storage.local.get(['apiKey']);
   if (saved.apiKey) {
@@ -194,20 +242,55 @@ async function initializeApp() {
 
   // Setup navigation
   setupNavigation();
-  
+
   // Setup schema type selector
   setupSchemaTypeSelector();
-  
+
   // Setup event listeners
   setupEventListeners();
-  
+
   // Load history
   loadHistory();
-  
+
+  // Load templates
+  loadTemplates();
+
   // Update copyright year
   const yearElement = document.getElementById('currentYear');
   if (yearElement) {
     yearElement.textContent = new Date().getFullYear();
+  }
+
+  // Initialize theme
+  initializeTheme();
+}
+
+function initializeTheme() {
+  const savedTheme = localStorage.getItem('theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+  if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+    document.body.classList.add('dark-mode');
+    updateThemeIcon(true);
+  } else {
+    document.body.classList.remove('dark-mode');
+    updateThemeIcon(false);
+  }
+}
+
+function updateThemeIcon(isDark) {
+  const toggleBtn = document.getElementById('themeToggle');
+  if (!toggleBtn) return;
+
+  const sunIcon = toggleBtn.querySelector('.sun-icon');
+  const moonIcon = toggleBtn.querySelector('.moon-icon');
+
+  if (isDark) {
+    sunIcon.style.display = 'block';
+    moonIcon.style.display = 'none';
+  } else {
+    sunIcon.style.display = 'none';
+    moonIcon.style.display = 'block';
   }
 }
 
@@ -216,10 +299,10 @@ function setupNavigation() {
     console.error('Menu items not found');
     return;
   }
-  
+
   elements.menuItems.forEach(item => {
     item.addEventListener('click', (e) => {
-    e.preventDefault();
+      e.preventDefault();
       const page = item.dataset.page;
       if (page) {
         switchPage(page);
@@ -236,7 +319,7 @@ function setupNavigation() {
 
 function switchPage(pageName) {
   console.log('Switching to page:', pageName);
-  
+
   // Update active menu item
   if (elements.menuItems) {
     elements.menuItems.forEach(item => {
@@ -271,7 +354,7 @@ function switchPage(pageName) {
   if (elements.pageTitle) {
     elements.pageTitle.textContent = titles[pageName] || 'Schema Builder';
   }
-  
+
   // Load history when switching to history page
   if (pageName === 'history') {
     loadHistory();
@@ -282,7 +365,7 @@ function setupSchemaTypeSelector() {
   elements.schemaType.addEventListener('change', () => {
     renderSchemaFields(elements.schemaType.value);
   });
-  
+
   elements.batchSchemaType.addEventListener('change', () => {
     // Update batch schema type
   });
@@ -294,15 +377,15 @@ function setupSchemaTypeSelector() {
 function renderSchemaFields(schemaType) {
   const fields = SCHEMA_FIELDS[schemaType] || [];
   const container = elements.schemaFields;
-  
+
   if (fields.length === 0) {
     container.innerHTML = '<p class="placeholder-text">No additional fields required for this schema type</p>';
-        return;
-      }
+    return;
+  }
 
   container.innerHTML = fields.map(field => {
     let inputHTML = '';
-    
+
     if (field.type === 'textarea') {
       inputHTML = `<textarea id="field-${field.id}" placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''}></textarea>`;
     } else if (field.type === 'select') {
@@ -358,6 +441,15 @@ function setupEventListeners() {
     toggleApiKeyVisibility(elements.apiKeyHeader, elements.toggleKeyHeader);
   });
 
+  // Theme toggle
+  const themeToggle = document.getElementById('themeToggle');
+  themeToggle?.addEventListener('click', () => {
+    document.body.classList.toggle('dark-mode');
+    const isDark = document.body.classList.contains('dark-mode');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    updateThemeIcon(isDark);
+  });
+
   // Generate schema
   elements.generateBtn?.addEventListener('click', handleGenerate);
 
@@ -365,13 +457,16 @@ function setupEventListeners() {
   const syncApiKey = async (value) => {
     if (value) {
       await chrome.storage.local.set({ apiKey: value });
-      // Sync to other field
-      if (elements.apiKey && elements.apiKey.value !== value) {
-        elements.apiKey.value = value;
-      }
-      if (elements.apiKeyHeader && elements.apiKeyHeader.value !== value) {
-        elements.apiKeyHeader.value = value;
-      }
+    } else {
+      await chrome.storage.local.remove(['apiKey']);
+    }
+
+    // Sync to other field
+    if (elements.apiKey && elements.apiKey.value !== value) {
+      elements.apiKey.value = value;
+    }
+    if (elements.apiKeyHeader && elements.apiKeyHeader.value !== value) {
+      elements.apiKeyHeader.value = value;
     }
   };
 
@@ -387,16 +482,16 @@ function setupEventListeners() {
 
   // File upload (batch processing)
   setupFileUpload();
-  
+
   // Batch processing
   elements.startProcessingBtn?.addEventListener('click', startBatchProcessing);
   elements.downloadAllBtn?.addEventListener('click', downloadAllTxt);
   elements.downloadAllJsonBtn?.addEventListener('click', downloadAllJson);
-  
+
   // Pause and Cancel buttons
   const pauseBtn = document.getElementById('pauseBtn');
   const cancelBtn = document.getElementById('cancelBtn');
-  
+
   pauseBtn?.addEventListener('click', () => {
     if (isPaused) {
       resumeProcessing();
@@ -404,14 +499,23 @@ function setupEventListeners() {
       pauseProcessing();
     }
   });
-  
+
   cancelBtn?.addEventListener('click', () => {
     cancelProcessing();
   });
-  
+
   // Start Afresh button
   elements.startAfreshBtn?.addEventListener('click', () => {
     startAfresh();
+  });
+
+  // Download Sample CSV
+  elements.downloadSampleBtn?.addEventListener('click', downloadSampleCsv);
+
+  // Create Schema button in sidebar
+  const createSchemaBtn = document.getElementById('createSchemaBtn');
+  createSchemaBtn?.addEventListener('click', () => {
+    switchPage('builder');
   });
 
   // Modal
@@ -422,9 +526,23 @@ function setupEventListeners() {
   elements.downloadTxtBtn?.addEventListener('click', handleDownloadTxt);
   elements.downloadJsonBtn?.addEventListener('click', handleDownloadJson);
 
+  // History
+  elements.deleteAllBtn?.addEventListener('click', deleteAllHistory);
+
   // Error toast
   elements.closeError?.addEventListener('click', () => {
     elements.errorToast.style.display = 'none';
+  });
+
+  // Confirmation modal
+  elements.closeConfirm?.addEventListener('click', closeConfirmModal);
+  elements.confirmCancel?.addEventListener('click', closeConfirmModal);
+
+  // Close confirmation modal on outside click
+  elements.confirmModal?.addEventListener('click', (e) => {
+    if (e.target === elements.confirmModal) {
+      closeConfirmModal();
+    }
   });
 
   // Close modal on outside click
@@ -435,12 +553,17 @@ function setupEventListeners() {
   });
 }
 
+function downloadSampleCsv() {
+  const content = 'url,primary_keywords\nhttps://example.com,keyword1;keyword2';
+  downloadFile(content, 'bulk-url-keywords-webpageSchema.csv', 'text/csv');
+}
+
 function setupFileUpload() {
   if (!elements.fileUploadArea) return;
 
   elements.fileUploadArea.addEventListener('click', () => elements.csvFile.click());
   elements.csvFile.addEventListener('change', handleFileSelect);
-  
+
   elements.fileUploadArea.addEventListener('dragover', (e) => {
     e.preventDefault();
     elements.fileUploadArea.classList.add('dragover');
@@ -481,20 +604,20 @@ async function handleGenerate() {
 
   if (!apiKey) {
     showError('Please enter your Google AI Studio API key');
-        return;
-      }
+    return;
+  }
 
   if (!url) {
     showError('Please enter a URL');
-        return;
-      }
+    return;
+  }
 
   try {
     new URL(url);
   } catch {
     showError('Please enter a valid URL');
-        return;
-      }
+    return;
+  }
 
   await chrome.storage.local.set({ apiKey });
   setLoading(true);
@@ -525,14 +648,14 @@ async function handleGenerate() {
 function getFieldValues(schemaType) {
   const fields = SCHEMA_FIELDS[schemaType] || [];
   const values = {};
-  
+
   fields.forEach(field => {
     const input = document.getElementById(`field-${field.id}`);
     if (input) {
       values[field.id] = input.value.trim();
     }
   });
-  
+
   return values;
 }
 
@@ -612,7 +735,7 @@ async function generateSchema(apiKey, url, pageData, schemaType, fieldValues = {
 
 function buildDefaultSchema(url, schemaType, pageData, fieldValues) {
   const base = {
-      '@context': 'https://schema.org',
+    '@context': 'https://schema.org',
     '@type': schemaType,
     url: url
   };
@@ -658,7 +781,7 @@ function enhanceSchema(schemaObj, url, schemaType, pageData, fieldValues, aiResu
     if (aiResult.keywords && Array.isArray(aiResult.keywords) && aiResult.keywords.length > 0) {
       schemaObj.keywords = aiResult.keywords.join(', ');
     }
-    
+
     // Add about array from knowsAbout
     if (aiResult.knowsAbout && Array.isArray(aiResult.knowsAbout) && aiResult.knowsAbout.length > 0) {
       schemaObj.about = aiResult.knowsAbout.map(item => ({
@@ -667,16 +790,16 @@ function enhanceSchema(schemaObj, url, schemaType, pageData, fieldValues, aiResu
         description: item.description || ''
       })).filter(item => item.name); // Only include items with names
     }
-    
+
     // Add publisher
     if (aiResult.publisher) {
-    schemaObj.publisher = {
-      '@type': 'Organization',
+      schemaObj.publisher = {
+        '@type': 'Organization',
         name: aiResult.publisher.name || '',
         url: aiResult.publisher.url || `https://${new URL(url).hostname}`,
         knowsAbout: aiResult.publisher.knowsAbout || []
       };
-      
+
       const logoUrl = pageData.logo || aiResult.publisher.logo;
       if (logoUrl && logoUrl.trim()) {
         schemaObj.publisher.logo = {
@@ -722,11 +845,12 @@ function enhanceSchema(schemaObj, url, schemaType, pageData, fieldValues, aiResu
 function buildPrompt(url, page, schemaType, domainHint, fieldValues) {
   // Special handling for WebPage schema with keywords
   if (schemaType === 'WebPage') {
-    const seedKeywords = fieldValues.keywords ? 
-      (Array.isArray(fieldValues.keywords) ? fieldValues.keywords : fieldValues.keywords.split(/[,;]/).map(k => k.trim()).filter(Boolean)) : 
+    const seedKeywords = fieldValues.keywords ?
+      (Array.isArray(fieldValues.keywords) ? fieldValues.keywords : fieldValues.keywords.split(/[,;]/).map(k => k.trim()).filter(Boolean)) :
       [];
-    
-  return `URL: ${url}
+
+
+    return `URL: ${url}
 Domain: ${domainHint}
 
 Title: ${page.title || ''}
@@ -776,12 +900,40 @@ Task:
        "description": "short description of entity"
      }
 
-Return JSON with keys: description, keywords (array of strings), knowsAbout (array of objects with 'name' and 'description'), publisher (object with 'name', 'url', 'logo' (URL string), and 'knowsAbout' array of strings), schema_jsonld (string).
-Only return JSON. No commentary.`;
+Example of desired output structure:
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "url": "https://softwarecw.com/collections/office-suites-software",
+  "name": "Office Suites Software - SoftwareCW",
+  "description": "Explore and download a variety of Microsoft Office Suite programs...",
+  "keywords": "ms office suite programs, Microsoft 365, Office Home and Student...",
+  "mainEntityOfPage": "https://softwarecw.com/collections/office-suites-software",
+  "publisher": {
+    "@type": "Organization",
+    "name": "SoftwareCW",
+    "url": "https://softwarecw.com",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://softwarecw.com/cdn/shop/files/Original_Rectangle_Logo_09fda69e-ecd2-4353-85a1-6247c54a429e.png"
+    },
+    "knowsAbout": ["Software", "Office Suites", "Productivity Tools"]
+  },
+  "about": [
+    {
+      "@type": "Thing",
+      "name": "Microsoft Office Suite",
+      "description": "A suite of applications designed for productivity tasks..."
+    }
+  ]
 }
 
+Return JSON with keys: description, keywords (array of strings), knowsAbout (array of objects with 'name' and 'description'), publisher (object with 'name', 'url', 'logo' (URL string), and 'knowsAbout' array of strings), schema_jsonld (string).
+Only return JSON. No commentary.`;
+  }
+
   // Generic prompt for other schema types
-  const fieldValuesText = Object.keys(fieldValues).length > 0 
+  const fieldValuesText = Object.keys(fieldValues).length > 0
     ? `\n\nAdditional Field Values:\n${JSON.stringify(fieldValues, null, 2)}`
     : '';
 
@@ -814,7 +966,7 @@ Include all required properties: @context, @type, url, description, keywords, ma
 The publisher must include a logo as an ImageObject with @type and url properties.
 The about array must contain Thing objects with @type, name, and description properties.`;
   }
-  
+
   return `You are an SEO and structured data assistant. Generate valid JSON-LD schemas for schema.org. 
 Create a complete, valid ${schemaType} schema based on the provided page content and field values.
 The schema_jsonld must be valid JSON-LD that follows schema.org specifications for ${schemaType}.
@@ -839,9 +991,9 @@ function handleCopy() {
   navigator.clipboard.writeText(wrappedSchema).then(() => {
     const originalHTML = elements.copyBtn.innerHTML;
     elements.copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 6px;"><polyline points="20 6 9 17 4 12"></polyline></svg>Copied!';
-      setTimeout(() => {
+    setTimeout(() => {
       elements.copyBtn.innerHTML = originalHTML;
-      }, 2000);
+    }, 2000);
   });
 }
 
@@ -898,6 +1050,36 @@ function hideError() {
 }
 
 // ============================================================================
+// CONFIRMATION MODAL
+// ============================================================================
+
+let confirmCallback = null;
+
+function showConfirmModal(title, message, onConfirm) {
+  if (!elements.confirmModal) return;
+
+  elements.confirmTitle.textContent = title;
+  elements.confirmMessage.textContent = message;
+  confirmCallback = onConfirm;
+  elements.confirmModal.style.display = 'flex';
+}
+
+function closeConfirmModal() {
+  if (!elements.confirmModal) return;
+
+  elements.confirmModal.style.display = 'none';
+  confirmCallback = null;
+}
+
+// Handle confirm delete button
+elements.confirmDelete?.addEventListener('click', () => {
+  if (confirmCallback) {
+    confirmCallback();
+  }
+  closeConfirmModal();
+});
+
+// ============================================================================
 // BATCH PROCESSING (Keep existing functionality)
 // ============================================================================
 
@@ -915,7 +1097,7 @@ function handleFileSelect(e) {
     try {
       const text = event.target.result;
       csvData = parseCSV(text);
-      
+
       if (csvData.length === 0) {
         showError('CSV file is empty or invalid');
         return;
@@ -944,7 +1126,7 @@ function parseCSV(text) {
 
   const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
   const urlIndex = headers.findIndex(h => h === 'url' || h === 'urls');
-  const keywordIndex = headers.findIndex(h => 
+  const keywordIndex = headers.findIndex(h =>
     h.includes('keyword') || h.includes('keywords') || h.includes('primary')
   );
 
@@ -1031,16 +1213,16 @@ async function startBatchProcessing() {
   currentIndex = 0;
   results = [];
   processingQueue = [...csvData];
-  
+
   // Update control buttons
   updateControlButtons();
-  
+
   // Hide configuration card, show progress and results
   const configCard = document.querySelector('#batchPage .cards-grid .card:first-of-type');
   if (configCard) {
     configCard.style.display = 'none';
   }
-  
+
   // Show progress and results cards
   if (elements.progressCard) {
     elements.progressCard.style.display = 'block';
@@ -1078,7 +1260,7 @@ async function processNext(schemaType, apiKey) {
     updateControlButtons();
     return;
   }
-  
+
   // Check if paused
   if (isPaused) {
     if (elements.currentUrl) elements.currentUrl.textContent = 'Processing paused...';
@@ -1086,7 +1268,7 @@ async function processNext(schemaType, apiKey) {
     setTimeout(() => processNext(schemaType, apiKey), 500);
     return;
   }
-  
+
   if (currentIndex >= processingQueue.length) {
     isProcessing = false;
     isPaused = false;
@@ -1109,11 +1291,11 @@ async function processNext(schemaType, apiKey) {
   try {
     const pageData = await extractPageContent(item.url);
     // Pass keywords from CSV to fieldValues for WebPage schema
-    const fieldValues = schemaType === 'WebPage' && item.keywords.length > 0 
-      ? { keywords: item.keywords } 
+    const fieldValues = schemaType === 'WebPage' && item.keywords.length > 0
+      ? { keywords: item.keywords }
       : {};
     const schema = await generateSchema(apiKey, item.url, pageData, schemaType, fieldValues);
-    
+
     results[currentIndex] = {
       url: item.url,
       keywords: item.keywords,
@@ -1124,13 +1306,13 @@ async function processNext(schemaType, apiKey) {
     updateResultItem(currentIndex, schema.schema, item.keywords);
     updateResultItemStatus(currentIndex, 'success');
     updateResultsSubtitle();
-    
+
     // Save to history
     saveToHistory(item.url, schemaType, schema.schema, fieldValues);
   } catch (error) {
     console.error(`Error processing ${item.url}:`, error);
     let errorMessage = error.message;
-    
+
     // Provide more helpful error messages
     if (errorMessage.includes('Timeout')) {
       errorMessage = 'Timeout: Page took too long to load. The page may be slow or have heavy JavaScript. Try retrying.';
@@ -1139,7 +1321,7 @@ async function processNext(schemaType, apiKey) {
     } else if (errorMessage.includes('CORS') || errorMessage.includes('cross-origin')) {
       errorMessage = 'Cross-origin restriction. Cannot access this page.';
     }
-    
+
     results[currentIndex] = {
       url: item.url,
       keywords: item.keywords,
@@ -1209,12 +1391,12 @@ function startAfresh() {
   currentIndex = 0;
   results = [];
   processingQueue = [];
-  
+
   // Clear results list
   if (elements.resultsList) {
     elements.resultsList.innerHTML = '';
   }
-  
+
   // Reset progress
   if (elements.progressBar) {
     elements.progressBar.style.width = '0%';
@@ -1225,7 +1407,7 @@ function startAfresh() {
   if (elements.currentUrl) {
     elements.currentUrl.textContent = '';
   }
-  
+
   // Hide progress card, show configuration card
   if (elements.progressCard) {
     elements.progressCard.style.display = 'none';
@@ -1233,16 +1415,16 @@ function startAfresh() {
   if (elements.resultsCard) {
     elements.resultsCard.style.display = 'none';
   }
-  
+
   const configCard = document.querySelector('#batchPage .cards-grid .card:first-of-type');
   if (configCard) {
     configCard.style.display = 'block';
   }
-  
+
   // Update buttons
   updateControlButtons();
   updateStartButton();
-  
+
   // Update results subtitle
   updateResultsSubtitle();
 }
@@ -1252,20 +1434,20 @@ function updateControlButtons() {
   const cancelBtn = elements.cancelBtn;
   const startAfreshBtn = elements.startAfreshBtn;
   const controlsContainer = document.querySelector('.progress-controls');
-  
+
   if (!pauseBtn || !cancelBtn || !startAfreshBtn || !controlsContainer) return;
-  
+
   // Show/hide buttons based on processing state
   if (isProcessing && !isCancelled) {
     controlsContainer.style.display = 'flex';
     pauseBtn.style.display = 'flex';
     cancelBtn.style.display = 'flex';
     startAfreshBtn.style.display = 'none';
-    
+
     // Update pause button text and icon
     const pauseIcon = pauseBtn.querySelector('.btn-icon svg');
     const pauseText = pauseBtn.querySelector('.btn-text');
-    
+
     if (isPaused) {
       // Show play icon
       if (pauseIcon) {
@@ -1296,11 +1478,11 @@ function updateControlButtons() {
 function updateResultsSubtitle() {
   const subtitle = document.getElementById('resultsSubtitle');
   if (!subtitle) return;
-  
+
   const successful = results.filter(r => r && r.success).length;
   const total = results.length;
   const failed = results.filter(r => r && !r.success).length;
-  
+
   if (total === 0) {
     subtitle.textContent = 'No results yet';
   } else if (isProcessing) {
@@ -1352,7 +1534,7 @@ function updateResultItem(index, schema, keywords) {
   actionsEl.innerHTML = '';
   actionsEl.style.display = 'flex';
   actionsEl.style.gap = '8px';
-  
+
   // Copy button
   const copyBtn = document.createElement('button');
   copyBtn.className = 'btn-secondary btn-small';
@@ -1369,7 +1551,7 @@ function updateResultItem(index, schema, keywords) {
     window.copySchema(index);
   });
   actionsEl.appendChild(copyBtn);
-  
+
   // Download TXT button
   const downloadTxtBtn = document.createElement('button');
   downloadTxtBtn.className = 'btn-secondary btn-small';
@@ -1388,7 +1570,7 @@ function updateResultItem(index, schema, keywords) {
     window.downloadSchemaTxt(index);
   });
   actionsEl.appendChild(downloadTxtBtn);
-  
+
   // Download JSON button
   const downloadJsonBtn = document.createElement('button');
   downloadJsonBtn.className = 'btn-secondary btn-small';
@@ -1414,7 +1596,7 @@ function updateResultItemError(index, errorMsg) {
   if (!contentEl || !actionsEl) return;
   contentEl.textContent = `Error: ${errorMsg}`;
   contentEl.style.display = 'block';
-  
+
   // Add retry button for failed items
   actionsEl.innerHTML = `
     <button class="btn-secondary btn-small btn-retry" onclick="retryFailedItem(${index})" title="Retry this item">
@@ -1429,7 +1611,7 @@ function updateResultItemError(index, errorMsg) {
   actionsEl.style.display = 'flex';
 }
 
-window.copySchema = function(index) {
+window.copySchema = function (index) {
   if (!results[index] || !results[index].success) {
     showError('No schema available to copy');
     return;
@@ -1440,13 +1622,13 @@ window.copySchema = function(index) {
     const resultItem = document.getElementById(`result-${index}`);
     if (resultItem) {
       const btn = resultItem.querySelector('.btn-secondary[title="Copy to clipboard"]');
-    if (btn) {
+      if (btn) {
         const originalHTML = btn.innerHTML;
         btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-      setTimeout(() => {
+        setTimeout(() => {
           btn.innerHTML = originalHTML;
-      }, 2000);
-    }
+        }, 2000);
+      }
     }
   }).catch(err => {
     console.error('Failed to copy:', err);
@@ -1454,7 +1636,7 @@ window.copySchema = function(index) {
   });
 };
 
-window.downloadSchemaTxt = function(index) {
+window.downloadSchemaTxt = function (index) {
   if (!results[index] || !results[index].success) {
     showError('No schema available to download');
     return;
@@ -1465,7 +1647,7 @@ window.downloadSchemaTxt = function(index) {
   downloadFile(content, `schema-${index + 1}.txt`, 'text/plain');
 };
 
-window.downloadSchemaJson = function(index) {
+window.downloadSchemaJson = function (index) {
   if (!results[index] || !results[index].success) {
     showError('No schema available to download');
     return;
@@ -1474,22 +1656,22 @@ window.downloadSchemaJson = function(index) {
   downloadFile(content, `schema-${index + 1}.json`, 'application/json');
 };
 
-window.retryFailedItem = async function(index) {
+window.retryFailedItem = async function (index) {
   // Check if item exists and failed
   if (!results[index] || results[index].success) return;
-  
+
   const item = processingQueue[index];
   if (!item) return;
-  
+
   // Get API key and schema type
   const apiKey = (elements.apiKeyHeader?.value.trim() || elements.apiKey?.value.trim());
   const schemaType = elements.batchSchemaType.value;
-  
+
   if (!apiKey) {
     showError('Please enter your API key');
     return;
   }
-  
+
   // Update UI to show retrying
   updateResultItemStatus(index, 'processing');
   const contentEl = document.getElementById(`content-${index}`);
@@ -1501,15 +1683,15 @@ window.retryFailedItem = async function(index) {
   if (actionsEl) {
     actionsEl.style.display = 'none';
   }
-  
+
   try {
     const pageData = await extractPageContent(item.url);
     // Pass keywords from CSV to fieldValues for WebPage schema
-    const fieldValues = schemaType === 'WebPage' && item.keywords.length > 0 
-      ? { keywords: item.keywords } 
+    const fieldValues = schemaType === 'WebPage' && item.keywords.length > 0
+      ? { keywords: item.keywords }
       : {};
     const schema = await generateSchema(apiKey, item.url, pageData, schemaType, fieldValues);
-    
+
     // Update result
     results[index] = {
       url: item.url,
@@ -1517,17 +1699,17 @@ window.retryFailedItem = async function(index) {
       schema: schema.schema,
       success: true
     };
-    
+
     updateResultItem(index, schema.schema, item.keywords);
     updateResultItemStatus(index, 'success');
     updateResultsSubtitle();
-    
+
     // Save to history
     saveToHistory(item.url, schemaType, schema.schema, fieldValues);
   } catch (error) {
     console.error(`Error retrying ${item.url}:`, error);
     let errorMessage = error.message;
-    
+
     // Provide more helpful error messages
     if (errorMessage.includes('Timeout')) {
       errorMessage = 'Timeout: Page took too long to load. The page may be slow or have heavy JavaScript.';
@@ -1536,7 +1718,7 @@ window.retryFailedItem = async function(index) {
     } else if (errorMessage.includes('CORS') || errorMessage.includes('cross-origin')) {
       errorMessage = 'Cross-origin restriction. Cannot access this page.';
     }
-    
+
     results[index] = {
       url: item.url,
       keywords: item.keywords,
@@ -1591,19 +1773,19 @@ async function saveToHistory(url, schemaType, schema, fieldValues = {}) {
       timestamp: Date.now(),
       date: new Date().toISOString()
     };
-    
+
     const result = await chrome.storage.local.get(['schemaHistory']);
     const history = result.schemaHistory || [];
-    
+
     // Add to beginning of array (most recent first)
     history.unshift(historyItem);
-    
+
     // Limit to last 100 items to prevent storage issues
     const maxItems = 100;
     if (history.length > maxItems) {
       history.splice(maxItems);
     }
-    
+
     await chrome.storage.local.set({ schemaHistory: history });
   } catch (error) {
     console.error('Error saving to history:', error);
@@ -1612,12 +1794,13 @@ async function saveToHistory(url, schemaType, schema, fieldValues = {}) {
 
 async function loadHistory() {
   if (!elements.historyList) return;
-  
+
   try {
     const result = await chrome.storage.local.get(['schemaHistory']);
     const history = result.schemaHistory || [];
-    
+
     if (history.length === 0) {
+      if (elements.deleteAllBtn) elements.deleteAllBtn.style.display = 'none';
       elements.historyList.innerHTML = `
         <div class="empty-state">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity: 0.3; margin-bottom: 16px;">
@@ -1629,61 +1812,134 @@ async function loadHistory() {
       `;
       return;
     }
-    
-    // Sort by timestamp (most recent first) - already sorted but ensure it
+
+    if (elements.deleteAllBtn) elements.deleteAllBtn.style.display = 'flex';
+
+    // Sort by timestamp (most recent first)
     const sortedHistory = history.sort((a, b) => b.timestamp - a.timestamp);
-    
-    elements.historyList.innerHTML = sortedHistory.map(item => {
+
+    // Group by date
+    const groupedHistory = {};
+    sortedHistory.forEach(item => {
       const date = new Date(item.timestamp);
-      const formattedDate = date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-      
-      return `
-        <div class="history-item" data-id="${item.id}">
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      let dateKey;
+      if (date.toDateString() === today.toDateString()) {
+        dateKey = 'Today';
+      } else if (date.toDateString() === yesterday.toDateString()) {
+        dateKey = 'Yesterday';
+      } else {
+        dateKey = date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+      }
+
+      if (!groupedHistory[dateKey]) {
+        groupedHistory[dateKey] = [];
+      }
+      groupedHistory[dateKey].push(item);
+    });
+
+    elements.historyList.innerHTML = '';
+
+    Object.keys(groupedHistory).forEach(dateGroup => {
+      // Create date header
+      const dateHeader = document.createElement('div');
+      dateHeader.className = 'history-date-header';
+      dateHeader.style.cssText = 'font-size: 12px; font-weight: 600; color: var(--text-secondary); margin: 24px 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px;';
+      dateHeader.textContent = dateGroup;
+      elements.historyList.appendChild(dateHeader);
+
+      // Create items for this group
+      groupedHistory[dateGroup].forEach(item => {
+        const date = new Date(item.timestamp);
+        const timeString = date.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+
+        const historyItem = document.createElement('div');
+        historyItem.className = 'history-item';
+        historyItem.dataset.id = item.id;
+
+        historyItem.innerHTML = `
           <div class="history-item-main">
             <div class="history-item-header">
               <div class="history-item-url">${item.url}</div>
-              <span class="history-item-type">${item.schemaType}</span>
             </div>
             <div class="history-item-meta">
-              <span class="history-item-date">${formattedDate}</span>
+              <span class="history-item-type">${item.schemaType}</span>
+              <span class="separator">•</span>
+              <span class="history-item-date">${timeString}</span>
             </div>
           </div>
-          <div class="history-item-actions">
-            <button class="btn-secondary btn-small" onclick="viewHistoryItem('${item.id}')" title="View schema">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                <circle cx="12" cy="12" r="3"></circle>
-              </svg>
-            </button>
-            <button class="btn-secondary btn-small" onclick="copyHistoryItem('${item.id}')" title="Copy schema">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-            </button>
-            <button class="btn-secondary btn-small" onclick="downloadHistoryItem('${item.id}')" title="Download schema">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-            </button>
-            <button class="btn-secondary btn-small btn-danger" onclick="deleteHistoryItem('${item.id}')" title="Delete">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
-            </button>
-          </div>
-        </div>
-      `;
-    }).join('');
+          <div class="history-item-actions"></div>
+        `;
+
+        const actionsDiv = historyItem.querySelector('.history-item-actions');
+
+        // View Button
+        const viewBtn = document.createElement('button');
+        viewBtn.className = 'btn-secondary btn-small';
+        viewBtn.title = 'View schema';
+        viewBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+        `;
+        viewBtn.addEventListener('click', () => viewHistoryItem(item.id));
+        actionsDiv.appendChild(viewBtn);
+
+        // Copy Button
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'btn-secondary btn-small';
+        copyBtn.title = 'Copy schema';
+        copyBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        `;
+        copyBtn.addEventListener('click', () => copyHistoryItem(item.id));
+        actionsDiv.appendChild(copyBtn);
+
+        // Download Button
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'btn-secondary btn-small';
+        downloadBtn.title = 'Download schema';
+        downloadBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+        `;
+        downloadBtn.addEventListener('click', () => downloadHistoryItem(item.id));
+        actionsDiv.appendChild(downloadBtn);
+
+        // Delete Button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn-secondary btn-small btn-danger';
+        deleteBtn.title = 'Delete';
+        deleteBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        `;
+        deleteBtn.addEventListener('click', () => deleteHistoryItem(item.id));
+        actionsDiv.appendChild(deleteBtn);
+
+        elements.historyList.appendChild(historyItem);
+      });
+    });
+
   } catch (error) {
     console.error('Error loading history:', error);
     elements.historyList.innerHTML = `
@@ -1694,42 +1950,42 @@ async function loadHistory() {
   }
 }
 
-window.viewHistoryItem = async function(id) {
+async function viewHistoryItem(id) {
   try {
     const result = await chrome.storage.local.get(['schemaHistory']);
     const history = result.schemaHistory || [];
     const item = history.find(h => h.id === id);
-    
+
     if (!item) {
       showError('History item not found');
       return;
     }
-    
+
     currentSchema = { schema: item.schema };
     showResultModal({ schema: item.schema });
   } catch (error) {
     console.error('Error viewing history item:', error);
     showError('Failed to view history item');
   }
-};
+}
 
-window.copyHistoryItem = async function(id) {
+async function copyHistoryItem(id) {
   try {
     const result = await chrome.storage.local.get(['schemaHistory']);
     const history = result.schemaHistory || [];
     const item = history.find(h => h.id === id);
-    
+
     if (!item) {
       showError('History item not found');
       return;
     }
-    
+
     const schemaText = JSON.stringify(item.schema, null, 2);
     const wrappedSchema = `<script type="application/ld+json">\n${schemaText}\n</script>`;
     await navigator.clipboard.writeText(wrappedSchema);
-    
+
     // Show feedback
-    const btn = document.querySelector(`[data-id="${id}"] .btn-secondary[onclick*="copyHistoryItem"]`);
+    const btn = document.querySelector(`.history-item[data-id="${id}"] button[title="Copy schema"]`);
     if (btn) {
       const originalHTML = btn.innerHTML;
       btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
@@ -1741,19 +1997,19 @@ window.copyHistoryItem = async function(id) {
     console.error('Error copying history item:', error);
     showError('Failed to copy schema');
   }
-};
+}
 
-window.downloadHistoryItem = async function(id) {
+async function downloadHistoryItem(id) {
   try {
     const result = await chrome.storage.local.get(['schemaHistory']);
     const history = result.schemaHistory || [];
     const item = history.find(h => h.id === id);
-    
+
     if (!item) {
       showError('History item not found');
       return;
     }
-    
+
     const content = JSON.stringify(item.schema, null, 2);
     const filename = `schema-${item.schemaType}-${Date.now()}.json`;
     downloadFile(content, filename, 'application/json');
@@ -1761,22 +2017,152 @@ window.downloadHistoryItem = async function(id) {
     console.error('Error downloading history item:', error);
     showError('Failed to download schema');
   }
-};
+}
 
-window.deleteHistoryItem = async function(id) {
-  if (!confirm('Are you sure you want to delete this history item?')) {
+async function deleteHistoryItem(id) {
+  showConfirmModal(
+    'Delete History Item',
+    'Are you sure you want to delete this history item? This action cannot be undone.',
+    async () => {
+      try {
+        const result = await chrome.storage.local.get(['schemaHistory']);
+        const history = result.schemaHistory || [];
+        const filtered = history.filter(h => h.id !== id);
+
+        await chrome.storage.local.set({ schemaHistory: filtered });
+        loadHistory(); // Reload history
+      } catch (error) {
+        console.error('Error deleting history item:', error);
+        showError('Failed to delete history item');
+      }
+    }
+  );
+}
+
+async function deleteAllHistory() {
+  showConfirmModal(
+    'Delete All History',
+    'Are you sure you want to delete ALL history items? This action cannot be undone and will permanently remove all your saved schemas.',
+    async () => {
+      try {
+        await chrome.storage.local.set({ schemaHistory: [] });
+        loadHistory(); // Reload history
+        showError('History cleared successfully'); // Using error toast for success
+        setTimeout(hideError, 2000);
+      } catch (error) {
+        console.error('Error deleting all history:', error);
+        showError('Failed to clear history');
+      }
+    }
+  );
+}
+
+// ============================================================================
+// TEMPLATES MANAGEMENT
+// ============================================================================
+
+function loadTemplates() {
+  const container = document.getElementById('templatesGrid');
+  if (!container) return;
+
+  const templates = Object.entries(TEMPLATES);
+
+  if (templates.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No templates available</p></div>';
     return;
   }
-  
-  try {
-    const result = await chrome.storage.local.get(['schemaHistory']);
-    const history = result.schemaHistory || [];
-    const filtered = history.filter(h => h.id !== id);
-    
-    await chrome.storage.local.set({ schemaHistory: filtered });
-    loadHistory(); // Reload history
-  } catch (error) {
-    console.error('Error deleting history item:', error);
-    showError('Failed to delete history item');
+
+  container.innerHTML = '';
+
+  templates.forEach(([key, template]) => {
+    const card = document.createElement('div');
+    card.className = 'card template-card';
+
+    card.innerHTML = `
+      <div class="template-header">
+        <h4>${template.name}</h4>
+        <span class="template-type">${key}</span>
+      </div>
+      <p class="template-desc">${template.description}</p>
+      <div class="template-actions"></div>
+    `;
+
+    const actionsDiv = card.querySelector('.template-actions');
+
+    const useBtn = document.createElement('button');
+    useBtn.className = 'btn-secondary btn-small';
+    useBtn.textContent = 'Use Template';
+    useBtn.addEventListener('click', () => useTemplate(key));
+
+    const viewBtn = document.createElement('button');
+    viewBtn.className = 'btn-secondary btn-small';
+    viewBtn.textContent = 'View JSON';
+    viewBtn.addEventListener('click', () => viewTemplate(key));
+
+    actionsDiv.appendChild(useBtn);
+    actionsDiv.appendChild(viewBtn);
+
+    container.appendChild(card);
+  });
+}
+
+function useTemplate(key) {
+  const template = TEMPLATES[key];
+  if (template) {
+    // Switch to builder
+    switchPage('builder');
+
+    // Set schema type
+    if (elements.schemaType) {
+      elements.schemaType.value = key;
+      renderSchemaFields(key);
+    }
+
+    // Set URL if available in template
+    if (elements.pageUrl && template.schema.url) {
+      elements.pageUrl.value = template.schema.url;
+    }
+
+    // Populate other fields based on schema type
+    const schema = template.schema;
+
+    // Helper to set field value if element exists
+    const setField = (id, value) => {
+      const el = document.getElementById(`field-${id}`);
+      if (el) el.value = value;
+    };
+
+    if (key === 'WebPage') {
+      if (schema.keywords) setField('keywords', schema.keywords);
+      if (schema.description) setField('description', schema.description);
+    } else if (key === 'Article') {
+      if (schema.headline) setField('headline', schema.headline);
+      if (schema.author?.name) setField('author', schema.author.name);
+      if (schema.datePublished) setField('datePublished', schema.datePublished);
+      if (schema.dateModified) setField('dateModified', schema.dateModified);
+      if (schema.image) setField('image', typeof schema.image === 'string' ? schema.image : schema.image.url);
+      if (schema.description) setField('description', schema.description);
+    } else if (key === 'Product') {
+      if (schema.name) setField('name', schema.name);
+      if (schema.description) setField('description', schema.description);
+      if (schema.offers?.price) setField('price', schema.offers.price);
+      if (schema.offers?.priceCurrency) setField('currency', schema.offers.priceCurrency);
+      if (schema.offers?.availability) {
+        const avail = schema.offers.availability.split('/').pop();
+        setField('availability', avail);
+      }
+      if (schema.image) setField('image', typeof schema.image === 'string' ? schema.image : schema.image.url);
+      if (schema.brand?.name) setField('brand', schema.brand.name);
+      if (schema.sku) setField('sku', schema.sku);
+    }
+    // Add more schema types as needed
   }
-};
+}
+
+function viewTemplate(key) {
+  const template = TEMPLATES[key];
+  if (template) {
+    currentSchema = { schema: template.schema };
+    showResultModal(currentSchema);
+  }
+}
