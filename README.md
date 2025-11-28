@@ -1,30 +1,24 @@
 # Webpage Schema Builder Chrome Extension
 
-A beautiful Chrome extension that generates JSON-LD schema markup for multiple webpages using Google's Gemini AI. Features a modern glassmorphism design and batch processing capabilities.
+This Chrome extension automates the creation of SEO-optimized JSON-LD schema markup for your websites. Powered by Google's Gemini AI, it analyzes your web pages to extract relevant content and generates accurate structured data. It supports batch processing, allowing you to upload a CSV of URLs and generate schemas for multiple pages at once, all within a modern, user-friendly interface.
 
 ## Features
 
-- ✨ **Glassmorphism UI** - Modern, clean design with frosted glass effects
-- 🤖 **AI-Powered** - Uses Google's Gemini Flash models to generate SEO-optimized schemas
-- 📊 **Batch Processing** - Process up to 20 URLs from a CSV file
-- 📄 **Multiple Formats** - Download individual or all schemas as TXT or JSON
-- 🔍 **Smart Extraction** - Automatically extracts page content, FAQs, and metadata
-- 🎯 **Keyword Support** - Include seed keywords for better schema generation
-- 📋 **One-Click Copy** - Copy schema to clipboard instantly
-- 📈 **Progress Tracking** - Real-time progress bar and status updates
+- **Glassmorphism UI** - Modern, clean design with frosted glass effects
+- **AI-Powered** - Uses Google's Gemini Flash models to generate SEO-optimized schemas
+- **Batch Processing** - Process up to 20 URLs from a CSV file
+- **Multiple Formats** - Download individual or all schemas as TXT or JSON
+- **Smart Extraction** - Automatically extracts page content, FAQs, and metadata
+- **Keyword Support** - Include seed keywords for better schema generation
+- **One-Click Copy** - Copy schema to clipboard instantly
+- **Progress Tracking** - Real-time progress bar and status updates
 
 ## Installation
 
-1. **Download the Source Code**
-   - **Option A (Git Users):** Clone the repository
-     ```bash
-     git clone <repository-url>
-     cd WebPageSchema
-     ```
-   - **Option B (Non-Git Users):**
-     - Click the green **"Code"** button at the top of the GitHub page.
-     - Select **"Download ZIP"**.
-     - Extract the ZIP file to a folder on your computer.
+1. **How to Download the extension**
+   - Click the green **"Code"** button at the top of the GitHub page.
+   - Select **"Download ZIP"**.
+   - Extract the ZIP file to a folder on your computer.
 
 2. **Get a Google AI Studio API Key**
    - Visit [https://aistudio.google.com/app/api-keys](https://aistudio.google.com/app/api-keys)
