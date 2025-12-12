@@ -752,24 +752,21 @@ async function generateSchema(apiKey, url, pageData, schemaType, fieldValues = {
     // Prefer FAQs from pageData (to support future scraping/manual input)
     const faqsFromPage = Array.isArray(pageData?.faqs) ? pageData.faqs : [];
 
-    let mainEntity;
-
-    if (faqsFromPage.length > 0) {
-      mainEntity = faqsFromPage.map(faq => ({
-        '@type': 'Question',
-        name: faq.question || '',
-        acceptedAnswer: {
-          '@type': 'Answer',
-          text: faq.answer || ''
-        }
-      })).filter(item => item.name && item.acceptedAnswer.text);
-    } else {
-      // Fallback to static template (matches your provided sample)
-      mainEntity = TEMPLATES.FAQPage?.schema?.mainEntity || [];
+    if (faqsFromPage.length === 0) {
+      throw new Error('No FAQs found on this page. Please choose a page with FAQ content or use a different schema type.');
     }
 
-    if (!mainEntity || mainEntity.length === 0) {
-      throw new Error('No FAQs found to build FAQPage schema');
+    const mainEntity = faqsFromPage.map(faq => ({
+      '@type': 'Question',
+      name: faq.question || '',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: faq.answer || ''
+      }
+    })).filter(item => item.name && item.acceptedAnswer.text);
+
+    if (mainEntity.length === 0) {
+      throw new Error('No valid FAQs found to build FAQPage schema');
     }
 
     const schemaObj = {
@@ -1627,7 +1624,7 @@ function addResultItem(url, keywords, index) {
   item.setAttribute('data-index', index);
   item.innerHTML = `
     <div class="result-item-url">
-      <button class="btn-ghost btn-icon-only" type="button" title="Open URL in new tab" onclick="window.open('${url.replace(/'/g, "\\'")}', '_blank')">
+      <button class="btn-ghost btn-icon-only url-preview-btn" type="button" title="Open URL in new tab" data-url="${url.replace(/"/g, '&quot;')}">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="14 3 21 3 21 10"></polyline>
           <line x1="10" y1="14" x2="21" y2="3"></line>
@@ -1642,6 +1639,19 @@ function addResultItem(url, keywords, index) {
     <div class="result-item-content" id="content-${index}" style="display: none;"></div>
   `;
   elements.resultsList.appendChild(item);
+
+  // Add event listener for URL preview button
+  const previewBtn = item.querySelector('.url-preview-btn');
+  if (previewBtn) {
+    previewBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const targetUrl = previewBtn.getAttribute('data-url');
+      if (targetUrl) {
+        window.open(targetUrl, '_blank');
+      }
+    });
+  }
 }
 
 function updateResultItemStatus(index, status) {

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Nitro SEO Schema",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Generate structured data schemas for SEO - Article, Product, Event, Recipe, Video, FAQ, LocalBusiness, Organization, and more",
   "permissions": [
     "activeTab",

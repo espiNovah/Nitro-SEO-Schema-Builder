@@ -378,7 +378,52 @@ function extractContentFromDOM() {
     });
   }
 
-  // 2) Common FAQ containers with heading + following content
+  // 2) Q: and A: text pattern (common in product pages)
+  if (faqs.length === 0) {
+    // Get main content text
+    const mainContent = clone.querySelector('main') || clone.querySelector('article') || clone.querySelector('[role="main"]') || clone.body;
+    const textContent = mainContent.textContent || '';
+
+    // Match Q: ... A: ... patterns (more robust regex)
+    // This pattern handles multi-line questions and answers
+    const qaPattern = /Q:\s*(.+?)\s*A:\s*(.+?)(?=\s*Q:|$)/gis;
+    let match;
+
+    while ((match = qaPattern.exec(textContent)) !== null) {
+      const question = match[1].trim();
+      let answer = match[2].trim();
+
+      // Clean up the answer - remove excessive whitespace
+      answer = answer.replace(/\s+/g, ' ').trim();
+
+      // Limit answer length to prevent capturing unrelated content
+      // Most FAQ answers are under 1000 characters
+      if (answer.length > 1000) {
+        // Try to find a natural break point (period followed by capital letter or common section markers)
+        const sentences = answer.match(/[^.!?]+[.!?]+/g);
+        if (sentences && sentences.length > 0) {
+          // Take first few sentences that total less than 1000 chars
+          let truncated = '';
+          for (const sentence of sentences) {
+            if ((truncated + sentence).length < 1000) {
+              truncated += sentence;
+            } else {
+              break;
+            }
+          }
+          if (truncated) {
+            answer = truncated.trim();
+          }
+        }
+      }
+
+      if (question && answer && answer.length > 20 && answer.length < 2000) {
+        faqs.push({ question, answer });
+      }
+    }
+  }
+
+  // 3) Common FAQ containers with heading + following content
   if (faqs.length === 0) {
     const candidateContainers = Array.from(
       clone.querySelectorAll(
@@ -465,7 +510,7 @@ function extractContentFromDOM() {
     }
   }
 
-  // 3) Fallback: Look for sections with "FAQ" or "Frequently Asked Questions" headings
+  // 4) Fallback: Look for sections with "FAQ" or "Frequently Asked Questions" headings
   if (faqs.length === 0) {
     const allHeadings = Array.from(clone.querySelectorAll('h1, h2, h3, h4, h5, h6'));
 
@@ -537,7 +582,7 @@ function extractContentFromDOM() {
     }
   }
 
-  // 4) Fallback: scan all H3 headings on the page for questions
+  // 5) Fallback: scan all H3 headings on the page for questions
   if (faqs.length === 0) {
     const allH3s = Array.from(clone.querySelectorAll('h3'));
 
