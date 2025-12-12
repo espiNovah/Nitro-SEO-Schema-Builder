@@ -4,7 +4,7 @@
 
 // Constants
 const MAX_URLS = 20;
-const MODEL = 'gemini-2.0-flash';
+const MODEL = 'gemini-2.5-flash';
 const GITHUB_REPO = 'espiNovah/Nitro-SEO-Schema-Builder';
 
 // Templates
@@ -817,7 +817,14 @@ async function generateSchema(apiKey, url, pageData, schemaType, fieldValues = {
     throw new Error('Model did not return valid JSON');
   }
 
-  const result = JSON.parse(jsonMatch[1]);
+  let result;
+  try {
+    result = JSON.parse(jsonMatch[1]);
+  } catch (parseError) {
+    console.error('Failed to parse AI response JSON:', parseError);
+    throw new Error(`AI returned malformed JSON: ${parseError.message}`);
+  }
+
   const schemaText = result.schema_jsonld || '';
 
   let schemaObj;
@@ -836,7 +843,6 @@ async function generateSchema(apiKey, url, pageData, schemaType, fieldValues = {
       delete schemaObj[key];
     }
   });
-
   return { schema: schemaObj };
 }
 
@@ -884,9 +890,24 @@ function enhanceSchema(schemaObj, url, schemaType, pageData, fieldValues, aiResu
 
   // Add publisher/logo for WebPage
   if (schemaType === 'WebPage') {
-    // Add keywords if provided
+    // FORCE OVERRIDE keywords with AI-generated expanded list
+    // This ensures we use the rich keyword list from aiResult.keywords instead of 
+    // the potentially limited keywords that might be in schema_jsonld
     if (aiResult.keywords && Array.isArray(aiResult.keywords) && aiResult.keywords.length > 0) {
-      schemaObj.keywords = aiResult.keywords.join(', ');
+      // Dedupe, clean, and join
+      const uniqueKeywords = [...new Set(aiResult.keywords.map(k => String(k).trim()).filter(k => k))];
+      schemaObj.keywords = uniqueKeywords.join(', ');
+    } else if (aiResult.keywords && typeof aiResult.keywords === 'string') {
+      // If it's already a string, use it as is
+      schemaObj.keywords = aiResult.keywords;
+    } else if (fieldValues.keywords) {
+      // Fall back to fieldValues if no keywords from AI
+      schemaObj.keywords = Array.isArray(fieldValues.keywords)
+        ? fieldValues.keywords.join(', ')
+        : fieldValues.keywords;
+    } else if (!schemaObj.keywords) {
+      // Only keep schema_jsonld keywords if we have nothing else
+      // This is the fallback case
     }
 
     // Add about array from knowsAbout
@@ -919,6 +940,11 @@ function enhanceSchema(schemaObj, url, schemaType, pageData, fieldValues, aiResu
 
   // Merge field values into schema
   Object.keys(fieldValues).forEach(key => {
+    // Skip keywords for WebPage - already handled above with AI expansion
+    if (schemaType === 'WebPage' && key === 'keywords') {
+      return;
+    }
+
     if (fieldValues[key]) {
       // Map field IDs to schema properties
       const propertyMap = {
@@ -956,7 +982,6 @@ function buildPrompt(url, page, schemaType, domainHint, fieldValues) {
       (Array.isArray(fieldValues.keywords) ? fieldValues.keywords : fieldValues.keywords.split(/[,;]/).map(k => k.trim()).filter(Boolean)) :
       [];
 
-
     return `URL: ${url}
 Domain: ${domainHint}
 
@@ -967,75 +992,35 @@ H1: ${JSON.stringify(page.h1 || [])}
 Extracted content (truncated):
 ${page.content || ''}
 
-Seed keywords:
+Topic / Seed keywords:
 ${JSON.stringify(seedKeywords)}
 
 Task:
 1) Write a one paragraph description of the page that fits the content.
-2) Propose a clean list of 5 to 20 page-specific keywords. Include some of the seed keywords if relevant.
+2) Generate a comprehensive list of 20 page-specific keywords.
+   - You MUST expand upon the seed keywords. Do NOT just return the seed keywords.
+   - Include synonyms, related terms, LSI keywords, and specific topics found in the content.
+   - Example: If seed is "nike leotard", generate "nike leotard, nike gymnastics leotards, girls performance leotards, nike elite sportswear, gymnastics apparel", etc.
 3) Propose a focused 'knowsAbout' list of 3 to 12 entities or topics. Each entity should have:
    - "name": the name of the entity
    - "description": a short 1-sentence description of the entity
 4) Identify the publisher/organization from the domain and content. Create a publisher object with:
    - "name": the organization/brand name
    - "url": the organization's homepage URL
-   - "logo": the organization's logo URL (use the logo from page metadata if available, otherwise construct a reasonable logo URL like https://domain.com/logo.png or https://domain.com/favicon.ico)
-   - "knowsAbout": 3-8 topics/areas the organization specializes in (simple strings, no descriptions)
+   - "logo": the organization's logo URL (from metadata or constructed)
+   - "knowsAbout": 3-8 topics/areas the organization specializes in (simple strings)
 5) Produce a JSON-LD for schema.org 'WebPage' with:
-   - '@context'
+   - '@context': 'https://schema.org'
    - '@type': 'WebPage'
-   - 'url'
-   - 'name' if clear
-   - 'description' from step 1
-   - 'keywords' as a comma separated string from step 2
-   - 'mainEntityOfPage' set to the URL
-   - 'publisher' object in this exact format:
-     {
-       "@type": "Organization",
-       "name": "Organization Name",
-       "url": "https://organization-url.com",
-       "logo": {
-         "@type": "ImageObject",
-         "url": "https://organization-logo-url.com"
-       },
-       "knowsAbout": ["topic1", "topic2", "topic3"]
-     }
-   - 'about' array with objects in this exact format:
-     {
-       "@type": "Thing",
-       "name": "name of entity",
-       "description": "short description of entity"
-     }
+   - 'url': '${url}'
+   - 'name': Page Title
+   - 'description': from step 1
+   - 'keywords': array of strings from step 2
+   - 'mainEntityOfPage': '${url}'
+   - 'publisher': { ... } (as defined in step 4)
+   - 'about': [ ... ] (array of Thing objects from step 3)
 
-Example of desired output structure:
-{
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  "url": "https://softwarecw.com/collections/office-suites-software",
-  "name": "Office Suites Software - SoftwareCW",
-  "description": "Explore and download a variety of Microsoft Office Suite programs...",
-  "keywords": "ms office suite programs, Microsoft 365, Office Home and Student...",
-  "mainEntityOfPage": "https://softwarecw.com/collections/office-suites-software",
-  "publisher": {
-    "@type": "Organization",
-    "name": "SoftwareCW",
-    "url": "https://softwarecw.com",
-    "logo": {
-      "@type": "ImageObject",
-      "url": "https://softwarecw.com/cdn/shop/files/Original_Rectangle_Logo_09fda69e-ecd2-4353-85a1-6247c54a429e.png"
-    },
-    "knowsAbout": ["Software", "Office Suites", "Productivity Tools"]
-  },
-  "about": [
-    {
-      "@type": "Thing",
-      "name": "Microsoft Office Suite",
-      "description": "A suite of applications designed for productivity tasks..."
-    }
-  ]
-}
-
-Return JSON with keys: description, keywords (array of strings), knowsAbout (array of objects with 'name' and 'description'), publisher (object with 'name', 'url', 'logo' (URL string), and 'knowsAbout' array of strings), schema_jsonld (string).
+Return JSON with keys: description, keywords (array of strings), knowsAbout (array of objects), publisher (object), schema_jsonld (string).
 Only return JSON. No commentary.`;
   }
 
@@ -1066,12 +1051,13 @@ Only return JSON. No commentary.`;
 
 function getSystemInstruction(schemaType) {
   if (schemaType === 'WebPage') {
-    return `You are an SEO and structured data assistant. Generate valid JSON-LD schemas for schema.org WebPage type.
-Create a complete, valid WebPage schema based on the provided page content.
-The schema_jsonld must be valid JSON-LD that follows schema.org WebPage specifications.
-Include all required properties: @context, @type, url, description, keywords, mainEntityOfPage, publisher (with logo), and about array.
-The publisher must include a logo as an ImageObject with @type and url properties.
-The about array must contain Thing objects with @type, name, and description properties.`;
+    return `You are an SEO and structured data assistant. Given a page's extracted content and seed keywords, write a concise WebPage JSON-LD.
+    
+    CRITICAL INSTRUCTIONS:
+    1. KEYWORDS: You must generate a rich list of at least 15-20 related keywords. Never return just the provided seed keywords. Expand the topic.
+    2. OUTPUT: Return valid JSON with fields: description, keywords (array of strings), knowsAbout (array of objects), publisher (object), and schema_jsonld (string).
+    3. SCHEMA: The schema_jsonld must be valid JSON-LD for schema.org/WebPage. 'keywords' in the schema must be a comma-separated string joined from your generated keyword list.
+    4. CONTENT: Use the provided page content to find relevant specific terms.`;
   }
 
   return `You are an SEO and structured data assistant. Generate valid JSON-LD schemas for schema.org. 
@@ -1140,15 +1126,15 @@ function setLoading(loading) {
   }
 }
 
-function showError(message) {
-  if (elements.errorMessage && elements.errorToast) {
-    elements.errorMessage.textContent = message;
-    elements.errorToast.style.display = 'block';
-    setTimeout(() => {
-      elements.errorToast.style.display = 'none';
-    }, 5000);
-  }
-}
+const showError = (message) => {
+  elements.errorMessage.textContent = message;
+  elements.errorToast.style.display = 'block';
+
+  // Auto-hide after 5 seconds
+  setTimeout(() => {
+    elements.errorToast.style.display = 'none';
+  }, 5000);
+};
 
 function hideError() {
   if (elements.errorToast) {
@@ -2046,6 +2032,23 @@ async function loadHistory() {
         `;
         viewBtn.addEventListener('click', () => viewHistoryItem(item.id));
         actionsDiv.appendChild(viewBtn);
+
+        // View in New Tab Button
+        const viewInNewTabBtn = document.createElement('button');
+        viewInNewTabBtn.className = 'btn-secondary btn-small';
+        viewInNewTabBtn.title = 'Open URL in new tab';
+        viewInNewTabBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+        `;
+        viewInNewTabBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.open(item.url, '_blank');
+        });
+        actionsDiv.appendChild(viewInNewTabBtn);
 
         // Copy Button
         const copyBtn = document.createElement('button');

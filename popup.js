@@ -89,7 +89,7 @@ const handleGenerate = async () => {
   // Input validation
   if (!apiKey) return showError('Please enter your Google AI Studio API key');
   if (!url) return showError('Please enter a URL');
-  
+
   try {
     new URL(url); // Validate URL format
   } catch {
@@ -162,7 +162,7 @@ function extractContentFromDOM() {
   const title = clone.querySelector('title')?.textContent?.trim() || '';
   const metaDesc = clone.querySelector('meta[name="description"]')?.getAttribute('content')?.trim() || '';
   const h1s = Array.from(clone.querySelectorAll('h1')).map(h => h.textContent.trim()).filter(Boolean);
-  
+
   // Get main content
   const mainContent = clone.querySelector('main') || clone.querySelector('article') || clone.querySelector('[role="main"]') || clone.body;
   const textContent = mainContent.textContent || '';
@@ -230,13 +230,23 @@ async function fetchPageContent(url) {
 }
 
 const generateSchema = async (apiKey, url, pageData, seedKeywords) => {
+  console.log('generateSchema called with:', { url, seedKeywords }); // Debug log
   const MODEL = 'gemini-2.5-flash';
   const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
-  
+
   try {
+    console.log('Starting API call...'); // Debug log
     const domain = new URL(url).hostname;
     const keywords = seedKeywords ? seedKeywords.split(/[,;]/).map(k => k.trim()).filter(Boolean) : [];
+    console.log('Processed keywords:', keywords); // Debug log
     const prompt = buildPrompt(url, pageData, keywords, domain);
+    console.log('Page data being sent to AI:', {
+      title: pageData.title,
+      meta_description: pageData.meta_description,
+      h1: pageData.h1,
+      content_length: pageData.content?.length || 0
+    }); // Debug log
+    console.log('Generated prompt length:', prompt.length); // Debug log
 
     const response = await fetch(API_URL, {
       method: 'POST',
@@ -247,7 +257,7 @@ const generateSchema = async (apiKey, url, pageData, seedKeywords) => {
         }],
         systemInstruction: {
           parts: [{
-            text: "You are an SEO and structured data assistant. Given a page's extracted content and seed keywords, write a concise WebPage JSON-LD that includes: description, keywords, and knowsAbout. Return JSON with fields: description, keywords (array), knowsAbout (array of objects with 'name' and 'description'), publisher (object with 'name', 'url', and 'knowsAbout' array of strings), and schema_jsonld (string). The schema_jsonld must be valid JSON-LD for schema.org WebPage. The description must reflect the page. Mix the seed keywords with new relevant ones. Avoid near-duplicates and keep them page-specific."
+            text: "You are an SEO and structured data assistant. Generate valid JSON-LD schemas for schema.org WebPage type. Create a complete, valid WebPage schema based on the provided page content. The schema_jsonld must be valid JSON-LD that follows schema.org WebPage specifications. Include all required properties: @context, @type, url, description, keywords, mainEntityOfPage, publisher (with logo), and about array. For keywords: Include a mix of the provided seed keywords (if any) with new relevant ones. Avoid near-duplicates and keep them page-specific."
           }]
         }
       })
@@ -260,11 +270,14 @@ const generateSchema = async (apiKey, url, pageData, seedKeywords) => {
 
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    console.log('Raw AI Response:', text); // Debug log
     const jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/) || text.match(/(\{[\s\S]*\})/);
-    
+
     if (!jsonMatch) throw new Error('Model did not return valid JSON');
     const result = JSON.parse(jsonMatch[1]);
-    
+    console.log('Parsed Result:', result); // Debug log
+    console.log('Parsed Result keywords:', result.keywords); // Debug log
+
     // Process schema
     const schemaText = result.schema_jsonld || '';
     let schemaObj;
@@ -282,14 +295,23 @@ const generateSchema = async (apiKey, url, pageData, seedKeywords) => {
     }
 
     // Update schema with final values
+    console.log('Result keywords:', result.keywords); // Debug log
+    console.log('Schema keywords:', schemaObj.keywords); // Debug log
+
+    // Always override keywords with the result keywords
+    const processedKeywords = Array.isArray(result.keywords)
+      ? result.keywords.map(k => String(k).trim()).filter(k => k).join(', ')
+      : (result.keywords || '');
+
     const finalSchema = {
       ...schemaObj,
       url,
       mainEntityOfPage: url,
       ...(pageData.title && { name: pageData.title }),
       description: result.description || '',
-      keywords: result.keywords?.join(', ') || ''
+      keywords: processedKeywords // Always use processed keywords
     };
+    console.log('Final keywords:', finalSchema.keywords); // Debug log
 
     // Add publisher if available
     if (result.publisher) {
@@ -312,9 +334,9 @@ const generateSchema = async (apiKey, url, pageData, seedKeywords) => {
         .filter(e => e.name);
     }
 
-    // Clean up null/undefined/empty values
+    // Clean up null/undefined/empty values (but keep keywords even if empty)
     Object.keys(finalSchema).forEach(key => {
-      if (finalSchema[key] === null || finalSchema[key] === undefined || finalSchema[key] === '') {
+      if (key !== 'keywords' && (finalSchema[key] === null || finalSchema[key] === undefined || finalSchema[key] === '')) {
         delete finalSchema[key];
       }
     });
@@ -332,8 +354,8 @@ const generateSchema = async (apiKey, url, pageData, seedKeywords) => {
   }
 };
 
-const buildPrompt = (url, page, seedKeywords, domainHint) => `
-URL: ${url}
+const buildPrompt = (url, page, seedKeywords, domainHint) => {
+  return `URL: ${url}
 Domain: ${domainHint}
 
 Title: ${page.title || ''}
@@ -380,17 +402,22 @@ Task:
 
 Return JSON with keys: description, keywords (array of strings), knowsAbout (array of objects with 'name' and 'description'), publisher (object with 'name', 'url', and 'knowsAbout' array of strings), schema_jsonld (string).
 Only return JSON. No commentary.`;
+};
 
 // UI Helpers
 const showResult = (schema, pageData) => {
   try {
     const { resultContent, resultCard, urlInput } = elements;
+
+    // Get keywords from the schema itself
+    const schemaKeywords = schema.schema.keywords || schema.keywords || '';
+
     const schemaText = JSON.stringify(schema.schema, null, 2);
     const wrappedSchema = `<script type="application/ld+json">\n${schemaText}\n</script>`;
-    
+
     let displayText = wrappedSchema;
     if (pageData) {
-      const preview = `URL: ${urlInput.value}\n\n${wrappedSchema}\n\n---\n\nPage Preview:\nTitle: ${pageData.title || 'N/A'}\nMeta: ${pageData.meta_description || 'N/A'}\nH1: ${pageData.h1?.join(', ') || 'N/A'}\n\nContent: ${pageData.content?.substring(0, 500) || 'No content extracted'}...`;
+      const preview = `URL: ${urlInput.value}\n\n${wrappedSchema}\n\n---\n\nPage Preview:\nTitle: ${pageData.title || 'N/A'}\nMeta: ${pageData.meta_description || 'N/A'}\nH1: ${pageData.h1?.join(', ') || 'N/A'}\nKeywords: ${schemaKeywords}\n\nContent: ${pageData.content?.substring(0, 500) || 'No content extracted'}...`;
       displayText = preview;
     }
 
@@ -411,6 +438,11 @@ const showError = (message) => {
   elements.errorMessage.textContent = message;
   elements.errorCard.style.display = 'block';
   elements.errorCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Auto-hide after 5 seconds
+  setTimeout(() => {
+    elements.errorCard.style.display = 'none';
+  }, 5000);
 };
 
 const hideError = () => {
@@ -428,13 +460,13 @@ const setLoading = (loading) => {
 // File handling utilities
 const handleCopy = async () => {
   if (!state.currentSchema?.schema) return;
-  
+
   try {
     const schemaText = JSON.stringify(state.currentSchema.schema, null, 2);
     const wrappedSchema = `<script type="application/ld+json">\n${schemaText}\n</script>`;
-    
+
     await navigator.clipboard.writeText(wrappedSchema);
-    
+
     const originalText = elements.copyBtn.textContent;
     elements.copyBtn.textContent = '✓ Copied!';
     setTimeout(() => {
@@ -467,17 +499,17 @@ const downloadFile = (content, filename, type) => {
 
 const handleDownloadTxt = () => {
   if (!state.currentSchema?.schema) return;
-  
+
   const schemaText = JSON.stringify(state.currentSchema.schema, null, 2);
   const wrappedSchema = `<script type="application/ld+json">\n${schemaText}\n</script>`;
   const content = `${elements.urlInput.value}\n${wrappedSchema}`;
-  
+
   downloadFile(content, 'schema.txt', 'text/plain');
 };
 
 const handleDownloadJson = () => {
   if (!state.currentSchema?.schema) return;
-  
+
   const content = JSON.stringify(state.currentSchema.schema, null, 2);
   downloadFile(content, 'schema.json', 'application/json');
 };

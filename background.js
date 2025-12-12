@@ -1,6 +1,6 @@
 // Configuration
 const CONFIG = {
-  extractionTimeout: 10000, // 10 seconds
+  extractionTimeout: 30000, // 30 seconds
   maxLoadAttempts: 60,      // 30 seconds max (60 * 500ms)
   checkInterval: 500,       // Check every 500ms
   initialDelay: 1000,       // Initial delay before checking page load
