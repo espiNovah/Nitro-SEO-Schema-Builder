@@ -1735,16 +1735,25 @@ function updateResultItemError(index, errorMsg) {
   contentEl.style.display = 'block';
 
   // Add retry button for failed items
-  actionsEl.innerHTML = `
-    <button class="btn-secondary btn-small btn-retry" onclick="retryFailedItem(${index})" title="Retry this item">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="23 4 23 10 17 10"></polyline>
-        <polyline points="1 20 1 14 7 14"></polyline>
-        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-      </svg>
-      <span>Retry</span>
-    </button>
+  actionsEl.innerHTML = '';
+
+  const retryBtn = document.createElement('button');
+  retryBtn.className = 'btn-secondary btn-small btn-retry';
+  retryBtn.title = 'Retry this item';
+  retryBtn.innerHTML = `
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="23 4 23 10 17 10"></polyline>
+      <polyline points="1 20 1 14 7 14"></polyline>
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+    </svg>
+    <span>Retry</span>
   `;
+  retryBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    retryFailedItem(index);
+  });
+  actionsEl.appendChild(retryBtn);
   actionsEl.style.display = 'flex';
 }
 
@@ -1793,7 +1802,7 @@ window.downloadSchemaJson = function (index) {
   downloadFile(content, `schema-${index + 1}.json`, 'application/json');
 };
 
-window.retryFailedItem = async function (index) {
+async function retryFailedItem(index) {
   // Check if item exists and failed
   if (!results[index] || results[index].success) return;
 
@@ -1866,7 +1875,7 @@ window.retryFailedItem = async function (index) {
     updateResultItemStatus(index, 'error');
     updateResultsSubtitle();
   }
-};
+}
 
 function downloadAllTxt() {
   const successful = results.filter(r => r && r.success);

@@ -26,7 +26,7 @@ const BLOCKED_URL_PATTERNS = [
  */
 function isUrlBlocked(url) {
   if (!url) return true;
-  return BLOCKED_URL_PATTERNS.some(pattern => 
+  return BLOCKED_URL_PATTERNS.some(pattern =>
     new RegExp(`^${pattern.replace(/\*/g, '.*')}`).test(url)
   );
 }
@@ -83,7 +83,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  */
 async function safeRemoveTab(tabId) {
   if (!tabId) return;
-  
+
   try {
     await new Promise((resolve) => {
       chrome.tabs.remove(tabId, () => {
@@ -112,11 +112,11 @@ async function extractContent(tabId) {
       target: { tabId },
       func: extractContentFromDOM
     });
-    
+
     if (!result?.result) {
       throw new Error('No content was extracted from the page');
     }
-    
+
     return result.result;
   } catch (error) {
     console.error('Content extraction failed:', error);
@@ -131,7 +131,7 @@ async function extractContent(tabId) {
  */
 async function waitForPageLoad(tabId) {
   let attempts = 0;
-  
+
   while (attempts < CONFIG.maxLoadAttempts) {
     const tab = await new Promise(resolve => {
       chrome.tabs.get(tabId, tab => {
@@ -142,21 +142,21 @@ async function waitForPageLoad(tabId) {
         }
       });
     });
-    
+
     if (!tab) {
       throw new Error('Tab was closed before loading completed');
     }
-    
+
     if (tab.status === 'complete') {
       // Additional delay for dynamic content
       await delay(CONFIG.dynamicContentDelay);
       return true;
     }
-    
+
     attempts++;
     await delay(CONFIG.checkInterval);
   }
-  
+
   return false;
 }
 
@@ -172,7 +172,7 @@ async function fetchPage(url) {
 
   let tabId;
   let timeoutId;
-  
+
   try {
     // Create a new tab
     const tab = await new Promise((resolve, reject) => {
@@ -184,19 +184,19 @@ async function fetchPage(url) {
         }
       });
     });
-    
+
     tabId = tab.id;
-    
+
     // Wait for page to load with timeout
     const pageLoaded = await Promise.race([
       waitForPageLoad(tabId),
       delay(CONFIG.extractionTimeout).then(() => false)
     ]);
-    
+
     if (!pageLoaded) {
       console.warn(`Page ${url} took too long to load, attempting extraction anyway...`);
     }
-    
+
     // Extract content with timeout
     const content = await Promise.race([
       extractContent(tabId),
@@ -204,13 +204,13 @@ async function fetchPage(url) {
         throw new Error('Content extraction timed out');
       })
     ]);
-    
+
     return content;
-    
+
   } catch (error) {
     console.error('Error in fetchPage:', error);
     throw error;
-    
+
   } finally {
     // Cleanup
     if (timeoutId) clearTimeout(timeoutId);
@@ -223,7 +223,7 @@ async function fetchPage(url) {
 function extractContentFromDOM() {
   // Remove navigation and footer elements
   const selectorsToRemove = [
-    'nav', 'header', 'footer',
+    'nav', 'header', 'footer', 'script', 'style', 'noscript',
     '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]',
     '.nav', '.navbar', '.navigation', '.menu', '.header', '.footer',
     '#nav', '#navbar', '#navigation', '#menu', '#header', '#footer',
@@ -243,6 +243,23 @@ function extractContentFromDOM() {
     }
   });
 
+  // Helper function to get clean text from an element (skip script/style tags)
+  function getCleanText(element) {
+    if (!element) return '';
+
+    // Clone the element to avoid modifying the original
+    const tempClone = element.cloneNode(true);
+
+    // Remove script and style tags
+    tempClone.querySelectorAll('script, style, noscript').forEach(el => el.remove());
+
+    // Get text and clean it up
+    const text = (tempClone.textContent || '').trim();
+
+    // Remove excessive whitespace
+    return text.replace(/\s+/g, ' ').trim();
+  }
+
   // Extract content
   const title = clone.querySelector('title')?.textContent?.trim() || '';
   const metaDesc = clone.querySelector('meta[name="description"]')?.getAttribute('content')?.trim() || '';
@@ -250,17 +267,17 @@ function extractContentFromDOM() {
 
   // Extract dates
   const datePublished = clone.querySelector('meta[property="article:published_time"]')?.getAttribute('content') ||
-                       clone.querySelector('meta[name="datePublished"]')?.getAttribute('content') ||
-                       clone.querySelector('time[itemprop="datePublished"]')?.getAttribute('datetime');
-                       
+    clone.querySelector('meta[name="datePublished"]')?.getAttribute('content') ||
+    clone.querySelector('time[itemprop="datePublished"]')?.getAttribute('datetime');
+
   const dateModified = clone.querySelector('meta[property="article:modified_time"]')?.getAttribute('content') ||
-                      clone.querySelector('meta[name="dateModified"]')?.getAttribute('content') ||
-                      clone.querySelector('time[itemprop="dateModified"]')?.getAttribute('datetime');
+    clone.querySelector('meta[name="dateModified"]')?.getAttribute('content') ||
+    clone.querySelector('time[itemprop="dateModified"]')?.getAttribute('datetime');
 
   // Extract author
   const author = clone.querySelector('meta[name="author"]')?.getAttribute('content') ||
-                clone.querySelector('meta[property="article:author"]')?.getAttribute('content') ||
-                clone.querySelector('[rel="author"]')?.textContent?.trim();
+    clone.querySelector('meta[property="article:author"]')?.getAttribute('content') ||
+    clone.querySelector('[rel="author"]')?.textContent?.trim();
 
   // Get main content
   const mainContent = clone.querySelector('main') || clone.querySelector('article') || clone.querySelector('[role="main"]') || clone.body;
@@ -270,10 +287,10 @@ function extractContentFromDOM() {
   // Extract FAQs from JSON-LD and DOM
   const faqs = [];
   const jsonLdScripts = clone.querySelectorAll('script[type="application/ld+json"]');
-  
+
   // Extract logo - be more specific to avoid article images
   let logo = '';
-  
+
   // 1. Try JSON-LD Organization logo first (most accurate)
   jsonLdScripts.forEach(script => {
     try {
@@ -304,10 +321,10 @@ function extractContentFromDOM() {
     const appleIcon = clone.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href');
     if (appleIcon) logo = appleIcon;
   }
-  
+
   if (!logo) {
-    const favicon = clone.querySelector('link[rel="icon"]')?.getAttribute('href') || 
-                   clone.querySelector('link[rel="shortcut icon"]')?.getAttribute('href');
+    const favicon = clone.querySelector('link[rel="icon"]')?.getAttribute('href') ||
+      clone.querySelector('link[rel="shortcut icon"]')?.getAttribute('href');
     if (favicon) logo = favicon;
   }
 
@@ -446,6 +463,125 @@ function extractContentFromDOM() {
         bestFaqs.slice(0, 20).forEach(f => faqs.push(f));
       }
     }
+  }
+
+  // 3) Fallback: Look for sections with "FAQ" or "Frequently Asked Questions" headings
+  if (faqs.length === 0) {
+    const allHeadings = Array.from(clone.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+
+    // Find headings that mention FAQ or Frequently Asked Questions
+    const faqHeadings = allHeadings.filter(h => {
+      const text = (h.textContent || '').toLowerCase().trim();
+      return text === 'faqs' ||
+        text === 'faq' ||
+        text === 'frequently asked questions' ||
+        text.includes('frequently asked') ||
+        (text.includes('faq') && text.length < 30); // Avoid false positives
+    });
+
+    if (faqHeadings.length > 0) {
+      // For each FAQ section heading, extract questions that follow
+      faqHeadings.forEach(faqHeading => {
+        let current = faqHeading.nextElementSibling;
+        const faqHeadingLevel = parseInt(faqHeading.tagName.substring(1)); // e.g., 2 for H2
+
+        // Collect all content until we hit a heading of equal or higher level
+        while (current) {
+          // Stop if we hit a heading of same or higher level (e.g., another H2 if we started with H2)
+          if (/H[1-6]/.test(current.tagName)) {
+            const currentLevel = parseInt(current.tagName.substring(1));
+            if (currentLevel <= faqHeadingLevel) break;
+
+            // This is a sub-heading (e.g., H3 under H2) - check if it's a question
+            const qText = (current.textContent || '').trim();
+            const lower = qText.toLowerCase();
+            const looksLikeQuestion =
+              qText.endsWith('?') ||
+              /\b(what|how|why|when|where|who|which|can|do|does|is|are|should|i'm)\b/.test(lower);
+
+            if (looksLikeQuestion) {
+              // Get answer from following siblings
+              let answer = '';
+              let next = current.nextElementSibling;
+              let siblingCount = 0;
+
+              while (next && siblingCount < 5) {
+                // Stop at next heading
+                if (/H[1-6]/.test(next.tagName)) break;
+
+                // Skip script and style elements
+                if (next.tagName === 'SCRIPT' || next.tagName === 'STYLE' || next.tagName === 'NOSCRIPT') {
+                  next = next.nextElementSibling;
+                  siblingCount++;
+                  continue;
+                }
+
+                const text = getCleanText(next);
+                if (text) {
+                  answer += (answer ? ' ' : '') + text;
+                }
+                next = next.nextElementSibling;
+                siblingCount++;
+              }
+
+              const aText = answer.trim();
+              if (aText && aText.length > 20) {
+                faqs.push({ question: qText, answer: aText });
+              }
+            }
+          }
+
+          current = current.nextElementSibling;
+        }
+      });
+    }
+  }
+
+  // 4) Fallback: scan all H3 headings on the page for questions
+  if (faqs.length === 0) {
+    const allH3s = Array.from(clone.querySelectorAll('h3'));
+
+    allH3s.forEach(h3 => {
+      const qText = (h3.textContent || '').trim();
+      if (!qText) return;
+
+      // Check if it looks like a question
+      const lower = qText.toLowerCase();
+      const looksLikeQuestion =
+        qText.endsWith('?') ||
+        /\b(what|how|why|when|where|who|which|can|do|does|is|are|should|i'm)\b/.test(lower);
+
+      if (!looksLikeQuestion) return;
+
+      // Get the answer from following siblings
+      let answer = '';
+      let next = h3.nextElementSibling;
+      let siblingCount = 0;
+
+      while (next && siblingCount < 5) {
+        // Stop at next heading
+        if (/H[1-6]/.test(next.tagName)) break;
+
+        // Skip script and style elements
+        if (next.tagName === 'SCRIPT' || next.tagName === 'STYLE' || next.tagName === 'NOSCRIPT') {
+          next = next.nextElementSibling;
+          siblingCount++;
+          continue;
+        }
+
+        const text = getCleanText(next);
+        if (text) {
+          answer += (answer ? ' ' : '') + text;
+        }
+        next = next.nextElementSibling;
+        siblingCount++;
+      }
+
+      const aText = answer.trim();
+      if (aText && aText.length > 20) {
+        faqs.push({ question: qText, answer: aText });
+      }
+    });
   }
 
   return {
