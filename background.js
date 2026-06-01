@@ -60,6 +60,24 @@ const messageHandlers = {
       console.error('Error in fetchPage handler:', error);
       return { error: error.message };
     }
+  },
+  async extractImages(url) {
+    try {
+      const data = await extractPageImages(url);
+      return { data };
+    } catch (error) {
+      console.error('Error in extractImages handler:', error);
+      return { error: error.message };
+    }
+  },
+  async fetchImageAsBase64(url) {
+    try {
+      const data = await fetchImageAsBase64Helper(url);
+      return { data };
+    } catch (error) {
+      console.error('Error in fetchImageAsBase64 handler:', error);
+      return { error: error.message };
+    }
   }
 };
 
@@ -67,10 +85,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action && messageHandlers[request.action]) {
     const handler = messageHandlers[request.action];
     handler(request.url || request.data)
-      .then(sendResponse)
-      .catch(error => ({
-        error: error.message || 'An unknown error occurred'
-      }));
+      .then(res => sendResponse(res))
+      .catch(error => {
+        sendResponse({ error: error.message || 'An unknown error occurred' });
+      });
     return true; // Keep the message channel open for async response
   }
   return false;
@@ -218,6 +236,107 @@ async function fetchPage(url) {
   }
 }
 
+/**
+ * Fetch an image and convert it to a base64 data URI
+ * @param {string} url - The URL of the image
+ * @returns {Promise<string>} The base64 data URI
+ */
+async function fetchImageAsBase64Helper(url) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`);
+    }
+    const buffer = await response.arrayBuffer();
+    const mimeType = response.headers.get('Content-Type') || 'image/jpeg';
+    
+    // Convert buffer to base64 using chunking to avoid call stack limits and slow loops
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.byteLength; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, chunk);
+    }
+    const base64 = btoa(binary);
+    
+    return `data:${mimeType};base64,${base64}`;
+  } catch (error) {
+    console.error(`Error fetching image ${url}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Extract images from a page by creating a hidden tab
+ * @param {string} url - The URL to extract images from
+ * @returns {Promise<Array>} Array of image objects {url, alt}
+ */
+async function extractPageImages(url) {
+  if (isUrlBlocked(url)) {
+    throw new Error('Access to this URL type is not allowed');
+  }
+
+  let tabId;
+  let timeoutId;
+
+  try {
+    // Create a new tab
+    const tab = await new Promise((resolve, reject) => {
+      chrome.tabs.create({ url, active: false }, (tab) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(tab);
+        }
+      });
+    });
+
+    tabId = tab.id;
+
+    // Wait for page to load with timeout
+    const pageLoaded = await Promise.race([
+      waitForPageLoad(tabId),
+      delay(CONFIG.extractionTimeout).then(() => false)
+    ]);
+
+    if (!pageLoaded) {
+      console.warn(`Page ${url} took too long to load, attempting extraction anyway...`);
+    }
+
+    // Extract images with timeout
+    const images = await Promise.race([
+      (async () => {
+        const [result] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => {
+            const imgs = Array.from(document.querySelectorAll('img'));
+            return imgs.map(img => ({
+              url: img.src,
+              alt: img.alt || ''
+            })).filter(img => img.url && !img.url.startsWith('data:'));
+          }
+        });
+        return result?.result || [];
+      })(),
+      delay(CONFIG.extractionTimeout).then(() => {
+        throw new Error('Image extraction timed out');
+      })
+    ]);
+
+    return images;
+
+  } catch (error) {
+    console.error('Error in extractPageImages:', error);
+    throw error;
+
+  } finally {
+    // Cleanup
+    if (timeoutId) clearTimeout(timeoutId);
+    if (tabId) await safeRemoveTab(tabId);
+  }
+}
+
 // Function to extract content from DOM (injected into page)
 // Function to extract content from DOM (injected into page)
 function extractContentFromDOM() {
@@ -235,6 +354,40 @@ function extractContentFromDOM() {
   ];
 
   const clone = document.cloneNode(true);
+
+  // Extract FAQs from JSON-LD BEFORE removing script tags
+  const faqs = [];
+  const jsonLdScripts = clone.querySelectorAll('script[type="application/ld+json"]');
+
+  jsonLdScripts.forEach(script => {
+    try {
+      const data = JSON.parse(script.textContent);
+      const items = Array.isArray(data) ? data : [data];
+      items.forEach(item => {
+        // Handle @graph structure
+        const graphItems = item['@graph'] ? item['@graph'] : [item];
+        graphItems.forEach(entry => {
+          if (entry['@type'] === 'FAQPage' && entry.mainEntity) {
+            const questions = Array.isArray(entry.mainEntity) ? entry.mainEntity : [entry.mainEntity];
+            questions.forEach(q => {
+              const name = q.name && typeof q.name === 'string' ? q.name.trim() : '';
+              const answerText = q.acceptedAnswer?.text && typeof q.acceptedAnswer.text === 'string'
+                ? q.acceptedAnswer.text.trim()
+                : '';
+
+              if (name && answerText) {
+                faqs.push({ question: name, answer: answerText });
+              }
+            });
+          }
+        });
+      });
+    } catch (e) {
+      // Ignore invalid JSON
+    }
+  });
+
+  // Now remove navigation and footer elements for cleaner text content
   selectorsToRemove.forEach(selector => {
     try {
       clone.querySelectorAll(selector).forEach(el => el.remove());
@@ -284,26 +437,26 @@ function extractContentFromDOM() {
   const textContent = mainContent.textContent || '';
   const cleanedText = textContent.replace(/\s+/g, ' ').trim().substring(0, 50000);
 
-  // Extract FAQs from JSON-LD and DOM
-  const faqs = [];
-  const jsonLdScripts = clone.querySelectorAll('script[type="application/ld+json"]');
-
   // Extract logo - be more specific to avoid article images
   let logo = '';
 
-  // 1. Try JSON-LD Organization logo first (most accurate)
+  // Use the jsonLdScripts we already found before removal
   jsonLdScripts.forEach(script => {
     try {
       const data = JSON.parse(script.textContent);
       const items = Array.isArray(data) ? data : [data];
       items.forEach(item => {
-        if (item['@type'] === 'Organization' && item.logo) {
-          if (typeof item.logo === 'string') {
-            logo = item.logo;
-          } else if (item.logo.url) {
-            logo = item.logo.url;
+        // Also check inside @graph
+        const checkItems = item['@graph'] ? item['@graph'] : [item];
+        checkItems.forEach(entry => {
+          if (entry['@type'] === 'Organization' && entry.logo) {
+            if (typeof entry.logo === 'string') {
+              logo = entry.logo;
+            } else if (entry.logo.url) {
+              logo = entry.logo.url;
+            }
           }
-        }
+        });
       });
     } catch (e) {
       // Ignore
@@ -370,8 +523,16 @@ function extractContentFromDOM() {
       const summary = details.querySelector('summary');
       if (summary) {
         const q = summary.textContent.trim();
-        const a = details.textContent.replace(summary.textContent, '').trim();
-        if (q && a) {
+        // Improved answer extraction: look for a panel/content div first
+        const panel = details.querySelector('.cc-accordion-item__panel, .accordion-item__content, .faq-answer, .answer');
+        let a = '';
+        if (panel) {
+          a = panel.textContent.trim();
+        } else {
+          a = details.textContent.replace(summary.textContent, '').trim();
+        }
+
+        if (q && a && a.length > 10) {
           faqs.push({ question: q, answer: a });
         }
       }

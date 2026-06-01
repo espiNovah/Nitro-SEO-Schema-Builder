@@ -397,6 +397,7 @@ function switchPage(pageName) {
   const titles = {
     builder: 'Schema Builder',
     batch: 'Batch Process',
+    altText: 'Alt Text Generator',
     templates: 'Templates',
     history: 'History'
   };
@@ -772,10 +773,7 @@ async function generateSchema(apiKey, url, pageData, schemaType, fieldValues = {
     const schemaObj = {
       '@context': 'https://schema.org',
       '@type': 'FAQPage',
-      description: 'JSON-LD schema for FAQPage',
-      mainEntity,
-      // Optional: use page title as name if available, otherwise leave out
-      ...(pageData?.title ? { name: pageData.title } : {})
+      mainEntity
     };
 
     return { schema: schemaObj };
@@ -853,7 +851,7 @@ function buildDefaultSchema(url, schemaType, pageData, fieldValues) {
   // Add type-specific defaults
   if (schemaType === 'WebPage') {
     base.mainEntityOfPage = url;
-    if (pageData && pageData.title) base.name = pageData.title;
+    if (pageData && pageData.title) base.name = pageData.title.split(/[|\-–—]/)[0].trim();
   } else if (schemaType === 'Article') {
     if (pageData.title) base.headline = pageData.title;
     if (fieldValues.author) base.author = { '@type': 'Person', name: fieldValues.author };
@@ -875,8 +873,9 @@ function buildDefaultSchema(url, schemaType, pageData, fieldValues) {
 
 function enhanceSchema(schemaObj, url, schemaType, pageData, fieldValues, aiResult) {
   // Add common fields
+  // Add common fields
   if (pageData.title && !schemaObj.name && !schemaObj.headline) {
-    schemaObj.name = pageData.title;
+    schemaObj.name = pageData.title.split(/[|\-–—]/)[0].trim();
   }
 
   if (aiResult.description) {
@@ -887,33 +886,41 @@ function enhanceSchema(schemaObj, url, schemaType, pageData, fieldValues, aiResu
 
   // Add publisher/logo for WebPage
   if (schemaType === 'WebPage') {
-    // FORCE OVERRIDE keywords with AI-generated expanded list
-    // This ensures we use the rich keyword list from aiResult.keywords instead of 
-    // the potentially limited keywords that might be in schema_jsonld
-    if (aiResult.keywords && Array.isArray(aiResult.keywords) && aiResult.keywords.length > 0) {
-      // Dedupe, clean, and join
-      const uniqueKeywords = [...new Set(aiResult.keywords.map(k => String(k).trim()).filter(k => k))];
-      schemaObj.keywords = uniqueKeywords.join(', ');
-    } else if (aiResult.keywords && typeof aiResult.keywords === 'string') {
-      // If it's already a string, use it as is
-      schemaObj.keywords = aiResult.keywords;
-    } else if (fieldValues.keywords) {
-      // Fall back to fieldValues if no keywords from AI
-      schemaObj.keywords = Array.isArray(fieldValues.keywords)
-        ? fieldValues.keywords.join(', ')
-        : fieldValues.keywords;
-    } else if (!schemaObj.keywords) {
-      // Only keep schema_jsonld keywords if we have nothing else
-      // This is the fallback case
+    // 1. Get manual keywords (prioritized)
+    let manualKeywords = [];
+    if (fieldValues.keywords) {
+      if (Array.isArray(fieldValues.keywords)) {
+        manualKeywords = fieldValues.keywords;
+      } else if (typeof fieldValues.keywords === 'string') {
+        manualKeywords = fieldValues.keywords.split(/[,;]/).map(k => k.trim()).filter(k => k);
+      }
     }
 
-    // Add about array from knowsAbout
-    if (aiResult.knowsAbout && Array.isArray(aiResult.knowsAbout) && aiResult.knowsAbout.length > 0) {
-      schemaObj.about = aiResult.knowsAbout.map(item => ({
+    // 2. Get AI keywords
+    let aiKeywords = [];
+    if (aiResult.keywords) {
+      if (Array.isArray(aiResult.keywords)) {
+        aiKeywords = aiResult.keywords.map(k => String(k).trim()).filter(k => k);
+      } else if (typeof aiResult.keywords === 'string') {
+        aiKeywords = aiResult.keywords.split(/[,;]/).map(k => k.trim()).filter(k => k);
+      }
+    }
+
+    // 3. Combine with manual first, then deduplicate
+    const combined = [...manualKeywords, ...aiKeywords];
+    const uniqueKeywords = [...new Set(combined)]; // Set preserves insertion order
+
+    if (uniqueKeywords.length > 0) {
+      schemaObj.keywords = uniqueKeywords;
+    }
+
+    // Add about (Page Level)
+    if (aiResult.about && Array.isArray(aiResult.about) && aiResult.about.length > 0) {
+      schemaObj.about = aiResult.about.map(item => ({
         '@type': 'Thing',
         name: item.name || '',
         description: item.description || ''
-      })).filter(item => item.name); // Only include items with names
+      })).filter(item => item.name);
     }
 
     // Add publisher
@@ -969,7 +976,53 @@ function enhanceSchema(schemaObj, url, schemaType, pageData, fieldValues, aiResu
     }
   });
 
-  return schemaObj;
+  // Final cleanup of name field to ensure no branding suffixes remain
+  if (schemaObj.name) {
+    schemaObj.name = schemaObj.name.split(/[|\-–—]/)[0].trim();
+  }
+
+  return reorderSchemaKeys(schemaObj);
+}
+
+function reorderSchemaKeys(schema) {
+  const order = [
+    '@context',
+    '@type',
+    'mainEntityOfPage',
+    'url',
+    'name',
+    'headline',
+    'description',
+    'keywords',
+    'publisher',
+    'about',
+    'knowsAbout',
+    'author',
+    'datePublished',
+    'dateModified',
+    'image',
+    'offers',
+    'aggregateRating',
+    'review'
+  ];
+
+  const newSchema = {};
+
+  // Add ordered keys first
+  order.forEach(key => {
+    if (schema[key] !== undefined) {
+      newSchema[key] = schema[key];
+    }
+  });
+
+  // Add remaining keys
+  Object.keys(schema).forEach(key => {
+    if (!order.includes(key)) {
+      newSchema[key] = schema[key];
+    }
+  });
+
+  return newSchema;
 }
 
 function buildPrompt(url, page, schemaType, domainHint, fieldValues) {
@@ -978,6 +1031,11 @@ function buildPrompt(url, page, schemaType, domainHint, fieldValues) {
     const seedKeywords = fieldValues.keywords ?
       (Array.isArray(fieldValues.keywords) ? fieldValues.keywords : fieldValues.keywords.split(/[,;]/).map(k => k.trim()).filter(Boolean)) :
       [];
+
+    // 3. Page Level: About
+    // Describes what this specific page is.
+    // 4. Domain Level: KnowsAbout
+    // Describes what the company is an expert in overall.
 
     return `URL: ${url}
 Domain: ${domainHint}
@@ -993,31 +1051,35 @@ Topic / Seed keywords:
 ${JSON.stringify(seedKeywords)}
 
 Task:
-1) Write a one paragraph description of the page that fits the content.
-2) Generate a comprehensive list of 20 page-specific keywords.
-   - You MUST expand upon the seed keywords. Do NOT just return the seed keywords.
-   - Include synonyms, related terms, LSI keywords, and specific topics found in the content.
-   - Example: If seed is "nike leotard", generate "nike leotard, nike gymnastics leotards, girls performance leotards, nike elite sportswear, gymnastics apparel", etc.
-3) Propose a focused 'knowsAbout' list of 3 to 12 entities or topics. Each entity should have:
-   - "name": the name of the entity
-   - "description": a short 1-sentence description of the entity
+1) Write a concise description of the page (max 3 sentences) that fits the content.
+2) Generate a concise list of 6 high-value LSI (Latent Semantic Indexing) keywords.
+   - These keywords MUST be very close variations or semantically related to the provided "Topic / Seed keywords".
+   - Focus on strict synonyms, specific long-tail variations, and terms that directly support the main topic.
+   - Do NOT go too broad. Stay highly relevant and specific to the page content.
+   - Example: If seed is "nike leotard", generate "nike gymnastics leotards", "girls performance leotards", "competition leotards", "sleeveless gymnastics leotard".
+3) Identify 3-5 specific topics this PAGE is 'about' (Page Level).
+   - describes what this specific page is.
+   - CRITICAL: These MUST be actual topics/products mentioned in the provided page content.
+   - Do NOT Hallucinate products not found in the text.
+   - Each entity should have "name" and "description".
 4) Identify the publisher/organization from the domain and content. Create a publisher object with:
    - "name": the organization/brand name
    - "url": the organization's homepage URL
-   - "logo": the organization's logo URL (from metadata or constructed)
-   - "knowsAbout": 3-8 topics/areas the organization specializes in (simple strings)
+   - "logo": the organization's logo URL
+   - "knowsAbout": 3-5 broad topics the COMPANY is an expert in overall (Domain Level).
+     - e.g. If the page is "Nike Leotard", company knows about "Gymnastics Apparel", "Sports Equipment".
 5) Produce a JSON-LD for schema.org 'WebPage' with:
    - '@context': 'https://schema.org'
    - '@type': 'WebPage'
    - 'url': '${url}'
-   - 'name': Page Title
+   - 'name': Page Title (remove brand/site name suffix)
    - 'description': from step 1
    - 'keywords': array of strings from step 2
    - 'mainEntityOfPage': '${url}'
    - 'publisher': { ... } (as defined in step 4)
    - 'about': [ ... ] (array of Thing objects from step 3)
 
-Return JSON with keys: description, keywords (array of strings), knowsAbout (array of objects), publisher (object), schema_jsonld (string).
+Return JSON with keys: description, keywords (array of strings), about (array of objects), publisher (object), schema_jsonld (string).
 Only return JSON. No commentary.`;
   }
 
@@ -1051,10 +1113,10 @@ function getSystemInstruction(schemaType) {
     return `You are an SEO and structured data assistant. Given a page's extracted content and seed keywords, write a concise WebPage JSON-LD.
     
     CRITICAL INSTRUCTIONS:
-    1. KEYWORDS: You must generate a rich list of at least 15-20 related keywords. Never return just the provided seed keywords. Expand the topic.
-    2. OUTPUT: Return valid JSON with fields: description, keywords (array of strings), knowsAbout (array of objects), publisher (object), and schema_jsonld (string).
-    3. SCHEMA: The schema_jsonld must be valid JSON-LD for schema.org/WebPage. 'keywords' in the schema must be a comma-separated string joined from your generated keyword list.
-    4. CONTENT: Use the provided page content to find relevant specific terms.`;
+    1. KEYWORDS: Generate exactly 6 high-value LSI keywords. They must be very close synonyms or variations of the seed keywords. Do NOT just return the seed keywords.
+    2. OUTPUT: Return valid JSON with fields: description, keywords (array of strings), about (array of objects), publisher (object), and schema_jsonld (string).
+    3. SCHEMA: The schema_jsonld must be valid JSON-LD for schema.org/WebPage. 'keywords' in the schema must be an array of strings (e.g., ["kw1", "kw2"]).
+    4. CONTENT: Use the provided page content to find relevant specific terms. Ensure all keywords are strict strings and publisher knowsAbout are simple strings.`;
   }
 
   return `You are an SEO and structured data assistant. Generate valid JSON-LD schemas for schema.org. 
@@ -2023,6 +2085,24 @@ async function loadHistory() {
         historyItem.className = 'history-item';
         historyItem.dataset.id = item.id;
 
+        let manualKeywordsDisplay = '';
+        if (item.fieldValues && item.fieldValues.keywords) {
+          let keywords = [];
+          if (Array.isArray(item.fieldValues.keywords)) {
+            keywords = item.fieldValues.keywords;
+          } else if (typeof item.fieldValues.keywords === 'string') {
+            keywords = item.fieldValues.keywords.split(/[,;]/).map(k => k.trim()).filter(k => k);
+          }
+
+          if (keywords.length > 0) {
+            manualKeywordsDisplay = `
+              <div class="history-item-keywords" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;">
+                <span style="font-weight: 500; color: var(--primary);">Manual Keywords:</span> ${keywords.join(', ')}
+              </div>
+            `;
+          }
+        }
+
         historyItem.innerHTML = `
           <div class="history-item-main">
             <div class="history-item-header">
@@ -2033,6 +2113,7 @@ async function loadHistory() {
               <span class="separator">•</span>
               <span class="history-item-date">${timeString}</span>
             </div>
+            ${manualKeywordsDisplay}
           </div>
           <div class="history-item-actions"></div>
         `;

@@ -176,14 +176,23 @@ function extractContentFromDOM() {
       const data = JSON.parse(script.textContent);
       const items = Array.isArray(data) ? data : [data];
       items.forEach(item => {
-        if (item['@type'] === 'FAQPage' && item.mainEntity) {
-          const questions = Array.isArray(item.mainEntity) ? item.mainEntity : [item.mainEntity];
-          questions.forEach(q => {
-            if (q.name && q.acceptedAnswer?.text) {
-              faqs.push([q.name, q.acceptedAnswer.text]);
-            }
-          });
-        }
+        // Handle @graph structure
+        const graphItems = item['@graph'] ? item['@graph'] : [item];
+        graphItems.forEach(entry => {
+          if (entry['@type'] === 'FAQPage' && entry.mainEntity) {
+            const questions = Array.isArray(entry.mainEntity) ? entry.mainEntity : [entry.mainEntity];
+            questions.forEach(q => {
+              const name = q.name && typeof q.name === 'string' ? q.name.trim() : '';
+              const answerText = q.acceptedAnswer?.text && typeof q.acceptedAnswer.text === 'string'
+                ? q.acceptedAnswer.text.trim()
+                : '';
+
+              if (name && answerText) {
+                faqs.push({ question: name, answer: answerText });
+              }
+            });
+          }
+        });
       });
     } catch (e) {
       // Ignore invalid JSON
@@ -196,8 +205,18 @@ function extractContentFromDOM() {
       const summary = details.querySelector('summary');
       if (summary) {
         const q = summary.textContent.trim();
-        const a = details.textContent.replace(q, '').trim();
-        if (q && a) faqs.push([q, a]);
+        // Improved answer extraction: look for a panel/content div first
+        const panel = details.querySelector('.cc-accordion-item__panel, .accordion-item__content, .faq-answer, .answer');
+        let a = '';
+        if (panel) {
+          a = panel.textContent.trim();
+        } else {
+          a = details.textContent.replace(summary.textContent, '').trim();
+        }
+
+        if (q && a && a.length > 10) {
+          faqs.push({ question: q, answer: a });
+        }
       }
     });
   }

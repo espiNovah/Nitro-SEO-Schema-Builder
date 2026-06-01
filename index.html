@@ -58,13 +58,20 @@
             <span>Schema Builder</span>
           </li>
           <li class="menu-item" data-page="batch">
-            <svg class="menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2">
+            <svg class="menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="20" x2="18" y2="10"></line>
               <line x1="12" y1="20" x2="12" y2="4"></line>
               <line x1="6" y1="20" x2="6" y2="14"></line>
             </svg>
             <span>Batch Process</span>
+          </li>
+          <li class="menu-item" data-page="altText">
+            <svg class="menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+            <span>Alt Text Gen</span>
           </li>
           <li class="menu-item" data-page="templates">
             <svg class="menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -435,6 +442,114 @@
           </div>
         </div>
 
+        <!-- Alt Text Generator Page -->
+        <div class="page-section" id="altTextPage" style="display: none;">
+          <div class="section-header">
+            <h3>Alt Text Generator</h3>
+            <p>Generate SEO-optimized alt text for images using Gemini Vision</p>
+          </div>
+
+          <div class="cards-grid">
+            <div class="card">
+              <h4>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 8px;">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                Input Mode
+              </h4>
+              
+              <div class="mode-toggle" style="display: flex; gap: 8px; margin-bottom: 20px;">
+                <button class="btn-secondary active" id="modeSingleBtn" style="flex:1">Single URL</button>
+                <button class="btn-secondary" id="modeScanBtn" style="flex:1">Scan Page</button>
+                <button class="btn-secondary" id="modeBulkBtn" style="flex:1">Bulk Paste</button>
+              </div>
+
+              <!-- Single URL Mode -->
+              <div id="modeSingleGroup">
+                <div class="form-group">
+                  <label for="singleImageUrl">Image URL</label>
+                  <input type="url" id="singleImageUrl" placeholder="https://example.com/image.jpg" />
+                </div>
+                <button class="btn-primary" id="generateSingleBtn">Generate Alt Text</button>
+              </div>
+
+              <!-- Scan Page Mode -->
+              <div id="modeScanGroup" style="display: none;">
+                <div class="form-group">
+                  <label for="scanPageUrl">Page URL to Scan</label>
+                  <input type="url" id="scanPageUrl" placeholder="https://example.com/product-page" />
+                  <small class="help-text">Extracts all images from the page and generates alt text.</small>
+                </div>
+                <button class="btn-primary" id="scanPageBtn">Scan & Generate</button>
+              </div>
+
+              <!-- Bulk Paste Mode -->
+              <div id="modeBulkGroup" style="display: none;">
+                <div class="form-group">
+                  <label for="bulkImageUrls">Image URLs (one per line)</label>
+                  <textarea id="bulkImageUrls" class="textarea-input" rows="6" placeholder="https://example.com/img1.jpg&#10;https://example.com/img2.jpg"></textarea>
+                </div>
+                <button class="btn-primary" id="generateBulkBtn">Generate for All</button>
+              </div>
+            </div>
+
+            <div class="card progress-card" id="altProgressCard" style="display: none;">
+              <h4>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 8px;">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                Progress
+              </h4>
+              <div class="progress-bar-container">
+                <div class="progress-bar" id="altProgressBar"></div>
+                <div class="progress-text" id="altProgressText">0 / 0</div>
+              </div>
+              <div class="current-url" id="altCurrentUrl" style="word-break: break-all; margin-top: 8px; font-size: 13px;"></div>
+              
+              <div class="progress-controls" style="display: flex; gap: 12px; margin-top: 16px;">
+                <button class="btn-secondary" id="altPauseBtn" style="flex: 1;"><span class="btn-text">⏸ Pause</span></button>
+                <button class="btn-secondary" id="altResumeSavedBtn" style="flex: 1; display: none; background: var(--accent-light); color: var(--accent); border-color: var(--accent);"><span class="btn-text">▶ Resume Saved Run</span></button>
+                <button class="btn-secondary" id="altCancelBtn" style="flex: 1; background: rgba(239, 68, 68, 0.1); color: var(--error); border-color: var(--error);">
+                  <span class="btn-text">Cancel</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card results-card" id="altResultsCard" style="display: none; margin-top: 20px;">
+            <div class="results-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+              <div>
+                <h4>Generated Alt Texts</h4>
+              </div>
+              <div class="results-actions" style="display: flex; gap: 8px;">
+                <button class="btn-secondary" id="altRetryFailedBtn" style="display:none; color: var(--warning);">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                  </svg>
+                  Retry Failed
+                </button>
+                <button class="btn-secondary" id="exportCsvBtn" style="display:none;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  Export CSV
+                </button>
+                <button class="btn-secondary" id="copyAllBtn" style="display:none;">📋 Copy All</button>
+                <button class="btn-secondary" id="altClearBtn" style="display:none; color: var(--error);">Clear</button>
+              </div>
+            </div>
+            <div class="alt-results-grid" id="altResultsGrid">
+              <!-- Results will appear here -->
+            </div>
+          </div>
+        </div>
+
         <!-- Templates Page -->
         <div class="page-section" id="templatesPage" style="display: none;">
           <div class="section-header">
@@ -556,6 +671,7 @@
   </div>
 
   <script src="app.js"></script>
+  <script src="alt-text-generator.js"></script>
 </body>
 
 </html>

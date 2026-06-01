@@ -332,6 +332,35 @@ body.dark-mode .card {
         inset 0 1px 0 rgba(255, 255, 255, 0.05); */
 }
 
+body.dark-mode .results-card {
+    background: rgba(30, 30, 32, 0.8);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-mode .results-header {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-mode .alt-result-card {
+    background: rgba(30, 30, 32, 0.8);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-mode .alt-result-card.error {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+body.dark-mode .alt-result-img {
+    background: #1e1e20;
+}
+
+body.dark-mode .alt-result-text {
+    background: rgba(20, 20, 22, 0.8);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: var(--text-primary);
+}
+
 body.dark-mode .card:hover {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.15);

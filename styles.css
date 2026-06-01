@@ -1292,6 +1292,117 @@ textarea {
   background: rgba(0, 0, 0, 0.2);
 }
 
+/* Custom Scrollbars for Inputs */
+textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+textarea::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 4px;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================
+   ALT TEXT GENERATOR SPECIFIC STYLES
+   ============================================ */
+
+.mode-toggle .btn-secondary {
+  border-radius: var(--radius-sm);
+}
+
+.mode-toggle .btn-secondary.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+.alt-results-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.alt-result-card {
+  display: flex;
+  gap: 16px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  align-items: flex-start;
+}
+
+.alt-result-card.error {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.alt-result-img {
+  width: 100px;
+  height: 100px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.alt-result-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.alt-result-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.alt-result-url {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alt-result-text {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px;
+  font-size: 13px;
+  resize: vertical;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--text-primary);
+}
+
+.alt-result-text.error-text {
+  color: var(--error);
+}
+
+.alt-result-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+
 /* ============================================
    ERROR TOAST
    ============================================ */
