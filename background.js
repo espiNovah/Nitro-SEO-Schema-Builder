@@ -126,16 +126,55 @@ async function safeRemoveTab(tabId) {
  */
 async function extractContent(tabId) {
   try {
+    // Primary extraction: structured DOM parsing
     const [result] = await chrome.scripting.executeScript({
       target: { tabId },
       func: extractContentFromDOM
     });
 
-    if (!result?.result) {
-      throw new Error('No content was extracted from the page');
+    if (result?.result && result.result.content) {
+      return result.result;
     }
 
-    return result.result;
+    // Fallback: grab everything visible on the page as raw text
+    console.warn('Primary extraction returned no content, falling back to full page text...');
+    const [fallbackResult] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const title = document.title || '';
+        const metaDesc = document.querySelector('meta[name="description"]')?.getAttribute('content') || '';
+        const h1s = Array.from(document.querySelectorAll('h1')).map(h => h.textContent.trim()).filter(Boolean);
+
+        // Grab all visible text from the page
+        const rawText = (document.body?.innerText || document.documentElement?.innerText || document.documentElement?.textContent || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .substring(0, 50000);
+
+        return {
+          title,
+          meta_description: metaDesc,
+          h1: h1s,
+          content: rawText,
+          faqs: [],
+          logo: '',
+          author: '',
+          datePublished: null,
+          dateModified: null
+        };
+      }
+    });
+
+    if (fallbackResult?.result?.content) {
+      return fallbackResult.result;
+    }
+
+    // Last resort: return whatever structured data we have even if content is empty
+    if (result?.result) {
+      return result.result;
+    }
+
+    throw new Error('No content was extracted from the page');
   } catch (error) {
     console.error('Content extraction failed:', error);
     throw new Error(`Failed to extract content: ${error.message}`);
@@ -340,6 +379,7 @@ async function extractPageImages(url) {
 // Function to extract content from DOM (injected into page)
 // Function to extract content from DOM (injected into page)
 function extractContentFromDOM() {
+  try {
   // Remove navigation and footer elements
   const selectorsToRemove = [
     'nav', 'header', 'footer', 'script', 'style', 'noscript',
@@ -432,10 +472,20 @@ function extractContentFromDOM() {
     clone.querySelector('meta[property="article:author"]')?.getAttribute('content') ||
     clone.querySelector('[rel="author"]')?.textContent?.trim();
 
-  // Get main content
-  const mainContent = clone.querySelector('main') || clone.querySelector('article') || clone.querySelector('[role="main"]') || clone.body;
-  const textContent = mainContent.textContent || '';
-  const cleanedText = textContent.replace(/\s+/g, ' ').trim().substring(0, 50000);
+  // Get main content — fall back progressively to ensure we always get something
+  const mainContent = clone.querySelector('main') ||
+    clone.querySelector('article') ||
+    clone.querySelector('[role="main"]') ||
+    clone.querySelector('#content') ||
+    clone.querySelector('.content') ||
+    clone.body ||
+    clone.documentElement;
+
+  // Prefer innerText (respects display:none) but fall back to textContent
+  const rawText = mainContent
+    ? (mainContent.innerText || mainContent.textContent || '')
+    : (document.body?.innerText || document.documentElement?.innerText || document.documentElement?.textContent || '');
+  const cleanedText = rawText.replace(/\s+/g, ' ').trim().substring(0, 50000);
 
   // Extract logo - be more specific to avoid article images
   let logo = '';
@@ -801,6 +851,32 @@ function extractContentFromDOM() {
     datePublished,
     dateModified
   };
+
+  } catch (domError) {
+    // Absolute last resort — return raw page text so the caller always gets something
+    console.warn('extractContentFromDOM threw, using raw innerText fallback:', domError);
+    try {
+      const rawFallback = (document.body?.innerText ||
+        document.documentElement?.innerText ||
+        document.documentElement?.textContent || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .substring(0, 50000);
+      return {
+        title: document.title || '',
+        meta_description: document.querySelector('meta[name="description"]')?.getAttribute('content') || '',
+        h1: Array.from(document.querySelectorAll('h1')).map(h => h.textContent.trim()).filter(Boolean),
+        content: rawFallback,
+        faqs: [],
+        logo: '',
+        author: '',
+        datePublished: null,
+        dateModified: null
+      };
+    } catch (e) {
+      return null; // Signal to caller that nothing could be extracted
+    }
+  }
 }
 
 

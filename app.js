@@ -659,6 +659,9 @@ function setupFileUpload() {
     csvData = [];
     elements.fileInfo.style.display = 'none';
     elements.fileUploadArea.style.display = 'block';
+    // Hide CSV preview
+    const preview = document.getElementById('csvPreview');
+    if (preview) preview.style.display = 'none';
     updateStartButton();
   });
 }
@@ -932,8 +935,11 @@ function enhanceSchema(schemaObj, url, schemaType, pageData, fieldValues, aiResu
         knowsAbout: aiResult.publisher.knowsAbout || []
       };
 
-      const logoUrl = pageData.logo || aiResult.publisher.logo;
-      if (logoUrl && logoUrl.trim()) {
+      let logoUrl = pageData.logo || aiResult.publisher.logo;
+      if (logoUrl && typeof logoUrl === 'object' && !Array.isArray(logoUrl)) {
+        logoUrl = logoUrl.url;
+      }
+      if (typeof logoUrl === 'string' && logoUrl.trim()) {
         schemaObj.publisher.logo = {
           '@type': 'ImageObject',
           url: logoUrl.trim()
@@ -1151,16 +1157,33 @@ function handleCopy() {
 
 function handleDownloadTxt() {
   if (!currentSchema) return;
+  const type = elements.schemaType.value || 'WebPage';
   const schemaText = JSON.stringify(currentSchema.schema, null, 2);
   const wrappedSchema = `<script type="application/ld+json">\n${schemaText}\n</script>`;
   const content = `${elements.pageUrl.value}\n${wrappedSchema}`;
-  downloadFile(content, 'schema.txt', 'text/plain');
+  downloadFile(content, uniqueFileName(`${type}-schema.txt`), 'text/plain');
 }
 
 function handleDownloadJson() {
   if (!currentSchema) return;
+  const type = elements.schemaType.value || 'WebPage';
   const content = JSON.stringify(currentSchema.schema, null, 2);
-  downloadFile(content, 'schema.json', 'application/json');
+  downloadFile(content, uniqueFileName(`${type}-schema.json`), 'application/json');
+}
+
+/**
+ * Returns a filename with a compact timestamp inserted before the extension
+ * so downloads are always unique and never overwrite an existing file.
+ * e.g. 'schema.json' → 'schema_2026-06-16_21-34-01.json'
+ */
+function uniqueFileName(filename) {
+  const now = new Date();
+  const date = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
+  const time = now.toTimeString().slice(0, 8).replace(/:/g, '-'); // HH-MM-SS
+  const stamp = `${date}_${time}`;
+  const dotIndex = filename.lastIndexOf('.');
+  if (dotIndex === -1) return `${filename}_${stamp}`;
+  return `${filename.slice(0, dotIndex)}_${stamp}${filename.slice(dotIndex)}`;
 }
 
 function downloadFile(content, filename, mimeType) {
@@ -1264,12 +1287,52 @@ function handleFileSelect(e) {
       elements.fileInfo.style.display = 'flex';
       elements.fileUploadArea.style.display = 'none';
       updateStartButton();
+      renderCsvPreview(csvData);
       hideError();
     } catch (error) {
       showError(`Error parsing CSV: ${error.message}`);
     }
   };
   reader.readAsText(file);
+}
+
+/**
+ * Render a compact preview table for the uploaded CSV data.
+ * Shows the URL and keywords columns with a row counter.
+ * Capped at 10 visible rows (scrollable) to keep the UI compact.
+ */
+function renderCsvPreview(data) {
+  const container = document.getElementById('csvPreview');
+  const thead    = document.getElementById('csvPreviewHead');
+  const tbody    = document.getElementById('csvPreviewBody');
+  const countEl  = document.getElementById('csvPreviewCount');
+
+  if (!container || !thead || !tbody) return;
+
+  const hasKeywords = data.some(row => row.keywords && row.keywords.length > 0);
+
+  // Build header
+  thead.innerHTML = `
+    <tr>
+      <th class="row-num">#</th>
+      <th>URL</th>
+      ${hasKeywords ? '<th>Keywords</th>' : ''}
+    </tr>
+  `;
+
+  // Build rows (show all, scrollable container caps height)
+  tbody.innerHTML = data.map((row, i) => `
+    <tr>
+      <td class="row-num">${i + 1}</td>
+      <td class="url-cell" title="${row.url}">${row.url}</td>
+      ${hasKeywords ? `<td class="keyword-cell" title="${row.keywords.join(', ')}">${row.keywords.join(', ') || '—'}</td>` : ''}
+    </tr>
+  `).join('');
+
+  // Update count badge
+  if (countEl) countEl.textContent = `${data.length} row${data.length !== 1 ? 's' : ''}`;
+
+  container.style.display = 'block';
 }
 
 function parseCSV(text) {
@@ -1859,10 +1922,11 @@ window.downloadSchemaTxt = function (index) {
     showError('No schema available to download');
     return;
   }
+  const type = elements.batchSchemaType.value || 'WebPage';
   const schemaText = JSON.stringify(results[index].schema, null, 2);
   const wrappedSchema = `<script type="application/ld+json">\n${schemaText}\n</script>`;
   const content = `${results[index].url}\n${wrappedSchema}`;
-  downloadFile(content, `schema-${index + 1}.txt`, 'text/plain');
+  downloadFile(content, uniqueFileName(`${type}-schema-${index + 1}.txt`), 'text/plain');
 };
 
 window.downloadSchemaJson = function (index) {
@@ -1870,8 +1934,9 @@ window.downloadSchemaJson = function (index) {
     showError('No schema available to download');
     return;
   }
+  const type = elements.batchSchemaType.value || 'WebPage';
   const content = JSON.stringify(results[index].schema, null, 2);
-  downloadFile(content, `schema-${index + 1}.json`, 'application/json');
+  downloadFile(content, uniqueFileName(`${type}-schema-${index + 1}.json`), 'application/json');
 };
 
 async function retryFailedItem(index) {
@@ -1955,6 +2020,7 @@ function downloadAllTxt() {
     showError('No successful results to download');
     return;
   }
+  const type = elements.batchSchemaType.value || 'WebPage';
   let content = '';
   successful.forEach((result, index) => {
     if (index > 0) content += '\n\n';
@@ -1962,7 +2028,7 @@ function downloadAllTxt() {
     const wrappedSchema = `<script type="application/ld+json">\n${schemaText}\n</script>`;
     content += `${result.url}\n${wrappedSchema}`;
   });
-  downloadFile(content, 'all-schemas.txt', 'text/plain');
+  downloadFile(content, uniqueFileName(`all-${type}-schemas.txt`), 'text/plain');
 }
 
 function downloadAllJson() {
@@ -1971,9 +2037,10 @@ function downloadAllJson() {
     showError('No successful results to download');
     return;
   }
+  const type = elements.batchSchemaType.value || 'WebPage';
   const allSchemas = successful.map(result => result.schema);
   const content = JSON.stringify(allSchemas, null, 2);
-  downloadFile(content, 'all-schemas.json', 'application/json');
+  downloadFile(content, uniqueFileName(`all-${type}-schemas.json`), 'application/json');
 }
 
 // ============================================================================
